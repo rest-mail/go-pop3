@@ -1,7 +1,7 @@
 # pop3
 
-[![CI](https://github.com/rest-mail/pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/pop3/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/pop3.svg)](https://pkg.go.dev/github.com/rest-mail/pop3)
+[![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3)
 
 A POP3 ([RFC 1939](https://www.rfc-editor.org/rfc/rfc1939)) server engine for Go,
 with zero external dependencies (standard library only).
@@ -19,7 +19,7 @@ on `QUIT`.
 ## Install
 
 ```sh
-go get github.com/rest-mail/pop3
+go get github.com/rest-mail/go-pop3
 ```
 
 ## Usage
@@ -32,7 +32,7 @@ package main
 import (
 	"crypto/tls"
 
-	"github.com/rest-mail/pop3"
+	"github.com/rest-mail/go-pop3"
 )
 
 // store is your mail store. Authenticate returns a Mailbox scoped to the user.
