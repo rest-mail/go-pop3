@@ -1,16 +1,49 @@
-// Package pop3 implements a POP3 (RFC 1939) server engine with zero external
+// Package pop3 implements a POP3 server engine, RFC 1939, with zero external
 // dependencies (standard library only).
 //
-// A caller supplies a [Backend] that authenticates users and exposes each
-// user's maildrop as a slice of neutral [Message] values; the [Server] speaks
-// the wire protocol — USER/PASS, CAPA, STLS (STARTTLS), STAT, LIST, UIDL, RETR,
-// TOP, DELE, RSET, NOOP and QUIT — and calls back into the Backend to fetch,
-// mark-seen and delete messages. The engine holds no assumptions about where
-// mail is stored: a Backend can be a database, a filesystem, or a remote API.
+// You supply a [Backend] that authenticates users and exposes each user's
+// maildrop as a slice of neutral [Message] values; the [Server] speaks the wire
+// protocol — USER/PASS, CAPA, STLS, STAT, LIST, UIDL, RETR, TOP, DELE, RSET,
+// NOOP and QUIT — and calls back into the Backend to fetch, mark-seen and delete
+// messages. The engine holds no assumptions about where mail is stored: a
+// Backend can be a database, a filesystem, or a remote API.
 //
-// The message body served by RETR/TOP is whatever [Mailbox.Retrieve] returns,
-// byte-for-byte, with RFC 1939 dot-stuffing applied on the wire. Messages the
-// client DELEtes are only removed on QUIT, matching RFC 1939 semantics.
+// The message body served by RETR and TOP is whatever [Mailbox.Retrieve]
+// returns, byte-for-byte, with RFC 1939 dot-stuffing applied on the wire.
+// Messages the client DELEtes are only removed on QUIT, matching RFC 1939
+// update-state semantics.
+//
+// # Backend
+//
+// A caller implements three interfaces. [Backend] validates credentials and
+// returns a [Mailbox]; [Mailbox] enumerates, retrieves, marks-seen and deletes
+// messages; each maildrop entry is a [Message] whose slice position (+1) is the
+// POP3 message number for the session. The engine calls [Mailbox.Messages] once
+// per session immediately after login, then serves the resulting snapshot.
+//
+// # Server
+//
+// [NewServer] builds a [Server] that listens on the plaintext and implicit-TLS
+// ports named by [Ports]; [Server.ListenAndServe] opens the listeners and
+// [Server.Shutdown] drains them gracefully. To drive a single already-accepted
+// connection yourself — behind your own listener or proxy — construct a
+// [Session] with [NewSession] and call [Session.Handle].
+//
+// # TLS and authentication
+//
+// A non-nil *tls.Config enables both the STLS command (STARTTLS for POP3,
+// RFC 2595) on the plaintext port and implicit TLS on the secure port. When a
+// TLS config is present the engine refuses USER on a plaintext connection, so
+// credentials are never sent in the clear; with no TLS config USER is accepted
+// as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
+// UIDL, RESP-CODES and PIPELINING.
+//
+// # Rate limiting
+//
+// [NewServer] and [NewSession] accept a [Limiter], a small structural interface
+// the engine consults for per-IP connection caps and authentication-failure
+// bans. Pass nil or [NopLimiter] to impose no limits, or wire in your own; any
+// type with the required methods satisfies it.
 package pop3
 
 // Message is one message in a POP3 maildrop, presented oldest-first. Its slice

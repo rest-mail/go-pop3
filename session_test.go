@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Non-contiguous message UIDs prove the gateway keys UIDL on the real message
+// Non-contiguous message UIDs prove the engine keys UIDL on the real message
 // UID (not the sequence number) and that seq<->UID mapping is consistent.
 const (
 	rawMsg5 = "From: Alice <alice@example.com>\r\n" +
