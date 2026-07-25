@@ -5,7 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
+
+## [0.2.0] - 2026-07-25
+
+### BREAKING CHANGES
+
+- **`Server.Shutdown` now takes a `context.Context` and returns an `error`.** Its
+  signature changed from `Shutdown()` to `Shutdown(ctx context.Context) error`: it
+  closes the listeners and then blocks until every in-flight session finishes, or
+  returns `ctx.Err()` if the context is done first — a graceful drain that mirrors
+  `net/http.Server.Shutdown`. Callers must now pass a context and handle the
+  returned error. For the previous immediate stop, use the new **`Server.Close()`**,
+  which force-closes live connections without waiting.
 
 ### Added
 
@@ -50,6 +62,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connection and spend one fresh authentication attempt on every reconnect. The
   accept loop now checks the ban list up front and drops a banned client before a
   session is created.
+- **`UIDL` now validates each unique-id and refuses a malformed or duplicate
+  one.** A backend-supplied unique-id was written into the `UIDL` response without
+  being checked, so an id containing a space, `CR`, or `LF`, or one outside the
+  RFC 1939 §7 grammar (1–70 characters in the range `0x21`–`0x7E`), could split the
+  `n uid` pair a client parses or inject protocol lines and desynchronize the
+  session. Single-message `UIDL n` now answers `-ERR` for a malformed id, and the
+  full-list form pre-scans every message and answers `-ERR` if any id is malformed
+  or duplicated before writing the `+OK` header, so a bad id can never corrupt the
+  dot-terminated block mid-stream.
+- **`NOOP` and `RSET` are now rejected before authentication.** Both are
+  TRANSACTION-state commands (RFC 1939 §5), reachable only after a successful
+  login, but they were dispatched with no authentication check, so a pre-auth
+  client received `+OK` — and `RSET` even reported a message count for a maildrop
+  that was not yet open. They now answer `-ERR` in the AUTHORIZATION state and
+  continue to work once the session is authenticated.
+- **`QUIT` now answers `-ERR` when a maildrop deletion fails.** On `QUIT` the
+  server enters the UPDATE state and commits every message marked for deletion
+  (RFC 1939 §6). A failed backend deletion was only logged while `QUIT` still
+  answered `+OK`, telling the client its deletions were durable — so a client that
+  trusts that reply may drop its local copies and silently lose mail that is still
+  on the server. Every deletion is still attempted, but `QUIT` now answers `-ERR`
+  when any of them fails and `+OK` only when the update fully succeeds.
+- **Credentials are now redacted from the per-command debug log.** With debug
+  logging enabled the full raw command line was recorded, so `PASS` wrote the
+  user's cleartext password to the logs (also capturing mistyped-but-valid
+  passwords on failed attempts). The argument of credential-bearing verbs — `PASS`,
+  `APOP`, and `AUTH` — is now replaced with `<redacted>` before logging; the
+  command keyword is kept for debuggability and all other command lines are logged
+  verbatim.
 - **No-argument commands now reject a spurious trailing argument with `-ERR`.**
   `STAT`, `RSET`, `NOOP`, `QUIT`, `STLS`, and `CAPA` take no arguments (RFC 1939
   §3, RFC 2595, RFC 2449), but a trailing token was silently dropped and the
