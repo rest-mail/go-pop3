@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -52,8 +53,24 @@ func NewSession(conn net.Conn, backend Backend, tlsConfig *tls.Config, limiter L
 }
 
 // Handle runs the POP3 state machine until the client disconnects or QUITs.
+//
+// A panic in any command handler or Backend/Mailbox call is recovered here so a
+// single misbehaving session is isolated — logged and answered with -ERR before
+// the connection is closed — rather than unwinding the per-connection goroutine
+// and crashing the whole process along with every concurrent session.
 func (s *Session) Handle() {
-	defer func() { _ = s.conn.Close() }()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("pop3: session panic recovered",
+				"remote", s.conn.RemoteAddr(),
+				"panic", r,
+				"stack", string(debug.Stack()),
+			)
+			// Best-effort notice to the client; the deferred Close follows.
+			s.err("Internal server error")
+		}
+		_ = s.conn.Close()
+	}()
 
 	slog.Info("pop3: new connection", "remote", s.conn.RemoteAddr())
 
@@ -207,6 +224,20 @@ func (s *Session) handlePass(arg string) {
 	}
 
 	s.limiter.ResetAuth(ip)
+
+	// A backend that returns (nil, nil) authenticated the user but handed us no
+	// mailbox. Reject it and stay in AUTHORIZATION rather than dereferencing a
+	// nil Mailbox interface below.
+	if mailbox == nil {
+		slog.Error("pop3: backend returned nil mailbox",
+			"remote", s.conn.RemoteAddr(),
+			"user", s.auth.username,
+		)
+		s.err("Failed to load mailbox")
+		s.auth.username = "" // reset; client may retry
+		return
+	}
+
 	s.auth.authenticated = true
 	s.mailbox = mailbox
 
