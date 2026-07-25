@@ -2,14 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: pre-1.0, breaking changes may ship in a minor release.
 
 ## [Unreleased]
 
 ## [0.2.0] - 2026-07-25
 
-### BREAKING CHANGES
+### Breaking
 
 - **`Server.Shutdown` now takes a `context.Context` and returns an `error`.** Its
   signature changed from `Shutdown()` to `Shutdown(ctx context.Context) error`: it
@@ -106,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   line that exceeds it is refused with `-ERR` and the connection is closed rather
   than buffered without limit.
 
-## v0.1.2
+## [0.1.2] - 2026-07-25
 
 ### Fixed
 
@@ -140,6 +139,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exceeded the advertised count and disagreed with LIST/STAT sizes. The trailing
   empty element is now dropped, so the wire octets match the advertised size.
 
-## v0.1.1
+## [0.1.1] - 2026-07-23
 
 - Initial tagged release lineage (see Git history for v0.1.0 and v0.1.1).
