@@ -52,10 +52,29 @@ package pop3
 // Message is one message in a POP3 maildrop, presented oldest-first. Its slice
 // position (+1) is the POP3 message number the client uses for the session.
 type Message struct {
-	// UID is the persistent unique identifier a client sees via UIDL. The Server
-	// also passes it back to [Mailbox.Retrieve], [Mailbox.MarkSeen] and
-	// [Mailbox.Delete] to name this message. It must be unique and stable within
-	// the maildrop for the session's lifetime.
+	// UID is the persistent unique identifier a client sees via UIDL (RFC 1939
+	// §7). The Server also passes it back to [Mailbox.Retrieve], [Mailbox.MarkSeen]
+	// and [Mailbox.Delete] to name this message.
+	//
+	// The backend must supply a UID that satisfies the RFC 1939 §7 unique-id
+	// contract:
+	//
+	//   - Grammar: 1 to 70 characters, each a printable ASCII byte in the range
+	//     0x21 ('!') to 0x7E ('~') inclusive — no spaces, control characters
+	//     (including CR and LF), DEL, or non-ASCII bytes.
+	//   - Unique: no two messages in the same maildrop may share a UID.
+	//   - Persistent across sessions: a leave-on-server client de-duplicates by
+	//     UID, so the same message must present the same UID on every future
+	//     connection — even after a session ends without reaching the UPDATE
+	//     state. Do not hand out sequence numbers or per-session identifiers.
+	//
+	// When the engine builds a UIDL response it validates each UID against the
+	// grammar and checks the listing for duplicates; a malformed UID, or a
+	// maildrop containing a duplicate UID, is answered with -ERR rather than
+	// emitting a reply that would corrupt the protocol framing or mislead the
+	// client. Persistence across sessions cannot be checked by the engine and
+	// remains the backend's responsibility. UIDs passed to Retrieve, MarkSeen and
+	// Delete are treated as opaque handles and are not re-validated.
 	UID string
 	// Size is the octet count reported by STAT and LIST (the RFC 1939 maildrop
 	// listing size). It need not equal the exact length Retrieve returns.

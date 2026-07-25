@@ -75,6 +75,34 @@ func canonicalCRLF(raw string) string {
 	return b.String()
 }
 
+// maxUIDLen is the RFC 1939 §7 upper bound on a UIDL unique-id: a unique-id is
+// "1 to 70 characters in the range 0x21 to 0x7E".
+const maxUIDLen = 70
+
+// validUID reports whether uid conforms to the RFC 1939 §7 unique-id grammar:
+// 1 to 70 characters, each a printable ASCII byte in the range 0x21 ('!') to
+// 0x7E ('~') inclusive. This rejects the empty string, any id longer than 70
+// bytes, the space (0x20), CR, LF, every other control character, DEL (0x7F),
+// and all high-bit/non-ASCII bytes. Because every legal byte is single-byte
+// ASCII, the byte length is also the character count.
+//
+// A UID that fails this test cannot be safely interpolated into a UIDL response
+// line: a space would split the "n uid" pair the client parses, and a CR or LF
+// would terminate the line early or inject an extra protocol line. The engine
+// therefore validates each UID at UIDL-response time and answers -ERR rather
+// than emitting a malformed reply (issue #15).
+func validUID(uid string) bool {
+	if len(uid) == 0 || len(uid) > maxUIDLen {
+		return false
+	}
+	for i := 0; i < len(uid); i++ {
+		if uid[i] < 0x21 || uid[i] > 0x7E {
+			return false
+		}
+	}
+	return true
+}
+
 // splitMessageLines splits a canonical CRLF message block into the lines to
 // transmit for RETR/TOP. A well-formed block ends in CRLF, so strings.Split on
 // "\r\n" yields a trailing "" that is the terminator of the final line, not a
