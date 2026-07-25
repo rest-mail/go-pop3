@@ -485,6 +485,10 @@ func (s *Session) handleRetr(arg string) {
 	// the "." terminator. Octets are counted on this canonical wire form.
 	raw := canonicalCRLF(string(rawBytes))
 
+	// The advertised count is the RFC 1939 §11 octet count of the message on the
+	// canonical CRLF form: len(raw) == OctetCount(rawBytes). This is the exact
+	// value STAT/LIST report via Message.Size when the backend sizes messages with
+	// OctetCount, so the two agree (issue #16).
 	s.ok("%d octets", len(raw))
 	// Send message, byte-stuffing lines starting with ".". splitMessageLines
 	// drops the trailing "" that strings.Split leaves for the final line's CRLF,

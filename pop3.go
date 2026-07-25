@@ -76,12 +76,37 @@ type Message struct {
 	// remains the backend's responsibility. UIDs passed to Retrieve, MarkSeen and
 	// Delete are treated as opaque handles and are not re-validated.
 	UID string
-	// Size is the octet count reported by STAT and LIST (the RFC 1939 maildrop
-	// listing size). It need not equal the exact length Retrieve returns.
+	// Size is the message's exact octet count as reported by STAT and LIST — the
+	// "exact size of the message in octets" of RFC 1939 §5's scan listing. It MUST
+	// be the number of octets RETR transmits for this message, measured on the
+	// canonical CRLF wire form: RFC 1939 §11 defines the count by normalizing the
+	// stored end-of-line convention to CRLF (a lone LF counts as the two octets
+	// CR LF), and the §3 byte-stuffing of leading-dot lines and the CRLF.CRLF
+	// terminator are transport framing that is NOT counted. This is exactly the
+	// value RETR advertises in its "+OK <n> octets" reply, so a client that
+	// pre-allocates or verifies against the LIST/STAT size matches what it
+	// receives. Compute it with [OctetCount] on the same bytes [Mailbox.Retrieve]
+	// returns; a size derived any other way (e.g. the raw on-disk length of
+	// bare-LF content) will disagree with RETR.
 	Size int
 	// Seen reports whether the message is already marked read. RETR issues a
 	// MarkSeen only for a message that was previously unseen; TOP never does.
 	Seen bool
+}
+
+// OctetCount returns the RFC 1939 §11 octet count of a stored message: the number
+// of octets RETR transmits for it, measured on the canonical CRLF wire form. Line
+// endings are normalized to CRLF exactly as RETR does before transmission (a lone
+// LF or a lone CR-then-LF becomes CR LF, so an end-of-line stored as a single
+// character counts as two octets, per §11), while a bare CR that is not a line
+// terminator is left unchanged. The §3 byte-stuffing of leading-dot lines and the
+// CRLF.CRLF terminator are transport framing and are deliberately excluded, so
+// the result matches the "+OK <n> octets" count RETR advertises.
+//
+// A [Backend] computes [Message.Size] with OctetCount over the same bytes
+// [Mailbox.Retrieve] returns so that STAT and LIST agree with RETR to the octet.
+func OctetCount(raw []byte) int {
+	return len(canonicalCRLF(string(raw)))
 }
 
 // Backend authenticates POP3 users. A [Server] calls Authenticate once per

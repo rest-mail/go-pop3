@@ -77,10 +77,12 @@ func (s *store) Authenticate(user, pass string) (pop3.Mailbox, error) {
 type maildrop struct{ /* ... */ }
 
 func (m *maildrop) Messages() ([]pop3.Message, error) {
-	// oldest-first; UID must be stable, Size is the STAT/LIST octet count
+	// oldest-first; UID must be stable. Size is the STAT/LIST octet count and
+	// MUST equal what RETR transmits — compute it with pop3.OctetCount over the
+	// same bytes Retrieve returns so LIST/STAT and RETR agree (RFC 1939 §11).
 	return []pop3.Message{
-		{UID: "1001", Size: 4213, Seen: false},
-		{UID: "1002", Size: 1198, Seen: true},
+		{UID: "1001", Size: pop3.OctetCount(raw1001), Seen: false},
+		{UID: "1002", Size: pop3.OctetCount(raw1002), Seen: true},
 	}, nil
 }
 
@@ -113,7 +115,9 @@ You implement three interfaces:
   message bytes; `MarkSeen(uid)` and `Delete(uid)` apply side effects.
 - **`Message`** — a maildrop entry: its `UID` (what the client sees via `UIDL`
   and what the engine passes back to `Retrieve`/`MarkSeen`/`Delete`), its `Size`
-  in octets for `STAT`/`LIST`, and whether it is already `Seen`.
+  in octets for `STAT`/`LIST`, and whether it is already `Seen`. `Size` must be
+  the exact octet count `RETR` transmits; use `pop3.OctetCount(raw)` over the
+  bytes `Retrieve` returns so the maildrop listing and `RETR` never disagree.
 
 A message's slice position (+1) in the `Messages()` result is the POP3 message
 number the client uses for the rest of the session; the engine translates

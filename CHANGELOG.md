@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- **`OctetCount(raw []byte) int`** computes the RFC 1939 §11 octet count of a
+  stored message — the number of octets `RETR` transmits, measured on the
+  canonical CRLF wire form (a lone LF counts as the two octets `CR LF`), with the
+  §3 leading-dot byte-stuffing and the `CRLF.CRLF` terminator excluded as
+  transport framing. Backends size messages with it so `STAT`/`LIST` and `RETR`
+  agree to the octet.
+
 ### Changed
 
+- **`Message.Size` is now defined as the exact `RETR` octet count.** Its
+  documentation previously said the size "need not equal the exact length
+  `Retrieve` returns," which licensed `STAT`/`LIST` to disagree with what `RETR`
+  delivers — a client that pre-allocates or verifies against the listing size
+  would then mismatch. RFC 1939 §5 requires the scan listing to carry the "exact
+  size of the message in octets," and §11 fixes that count to the CRLF-normalized
+  form. `Size` must now be that count (compute it with the new `OctetCount`); the
+  engine already advertises and transmits exactly this value from `RETR`, so the
+  two now agree by construction. No wire behavior changed; the contract and its
+  documentation were tightened.
 - **`Server.Shutdown` now takes a `context.Context` and actually drains
   in-flight sessions.** It previously waited only on the accept-loop goroutines —
   which return the moment their listener closes — so it returned while client
