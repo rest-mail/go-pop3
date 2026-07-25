@@ -114,7 +114,7 @@ func (s *Session) Handle() {
 			continue
 		}
 
-		slog.Debug("pop3: recv", "remote", s.conn.RemoteAddr(), "cmd", line)
+		slog.Debug("pop3: recv", "remote", s.conn.RemoteAddr(), "cmd", redactCommand(line))
 
 		cmd, arg := parseCommand(line)
 
