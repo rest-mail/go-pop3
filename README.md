@@ -97,7 +97,7 @@ func main() {
 	if err := srv.ListenAndServe(pop3.Ports{POP3: 110, POP3TLS: 995}); err != nil {
 		panic(err)
 	}
-	select {} // serve until srv.Shutdown()
+	select {} // serve until srv.Shutdown(ctx) or srv.Close()
 }
 ```
 
@@ -123,10 +123,13 @@ between those numbers and your stable `UID`s.
 
 `NewServer(backend, tlsConfig, limiter)` builds a `Server`. `ListenAndServe`
 opens the plaintext and implicit-TLS listeners named by `Ports` (a zero port is
-skipped) and returns immediately, serving connections in the background until
-`Shutdown` drains them. To drive a single already-accepted connection yourself —
-behind your own listener or proxy — construct a `Session` with
-`NewSession(conn, backend, tlsConfig, limiter)` and call `Handle()`.
+skipped) and returns immediately, serving connections in the background.
+`Shutdown(ctx)` stops accepting and blocks until the in-flight sessions finish
+(or `ctx` is cancelled); `Close()` is the immediate hard stop that force-closes
+live connections without waiting — the same split as `net/http.Server`. To drive
+a single already-accepted connection yourself — behind your own listener or
+proxy — construct a `Session` with `NewSession(conn, backend, tlsConfig, limiter)`
+and call `Handle()`.
 
 ## TLS
 

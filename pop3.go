@@ -25,8 +25,10 @@
 // # Server
 //
 // [NewServer] builds a [Server] that listens on the plaintext and implicit-TLS
-// ports named by [Ports]; [Server.ListenAndServe] opens the listeners and
-// [Server.Shutdown] drains them gracefully. To drive a single already-accepted
+// ports named by [Ports]; [Server.ListenAndServe] opens the listeners.
+// [Server.Shutdown] stops accepting and then blocks until the in-flight
+// sessions drain (or its context deadline passes), while [Server.Close] stops
+// at once, force-closing live connections. To drive a single already-accepted
 // connection yourself — behind your own listener or proxy — construct a
 // [Session] with [NewSession] and call [Session.Handle].
 //
