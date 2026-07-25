@@ -155,6 +155,14 @@ satisfies it.
 Full API reference:
 [pkg.go.dev/github.com/rest-mail/go-pop3](https://pkg.go.dev/github.com/rest-mail/go-pop3).
 
+## Changelog
+
+Recent releases — see [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+- **v0.2.0** (2026-07-25) — breaking: `Shutdown(ctx) error` graceful drain + new `Close()`; UIDL validation, pre-auth NOOP/RSET rejection, QUIT `-ERR` on delete failure, LIST/STAT size consistency.
+- **v0.1.2** (2026-07-25) — RETR/TOP normalize bare LF to CRLF so dot-stuffing holds; per-session panic recovery; nil-mailbox and failed-maildrop-load guards; no spurious blank line before the terminator.
+- **v0.1.1** (2026-07-23) — initial tagged release.
+
 ## License
 
 [MIT](LICENSE) © 2026 rest-mail
