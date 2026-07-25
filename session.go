@@ -399,11 +399,55 @@ func (s *Session) handleUidl(arg string) {
 			s.err("Message is deleted")
 			return
 		}
-		s.ok("%d %s", n, s.messages[n-1].UID)
+		uid := s.messages[n-1].UID
+		// Fail safe on a non-conforming id (RFC 1939 §7): emitting it verbatim
+		// would break the "n uid" line or inject protocol lines (CR/LF). See
+		// [validUID].
+		if !validUID(uid) {
+			slog.Error("pop3: backend supplied invalid UIDL unique-id",
+				"remote", s.conn.RemoteAddr(),
+				"msg", n,
+				"uidlen", len(uid),
+			)
+			s.err("Invalid unique-id for message")
+			return
+		}
+		s.ok("%d %s", n, uid)
 		return
 	}
 
-	// All messages
+	// All messages. Validate the whole listing BEFORE writing the "+OK" header:
+	// once the header is sent the reply is a dot-terminated block we cannot
+	// cleanly abort, so a single malformed id emitted mid-list would corrupt the
+	// framing. Pre-scan the non-deleted messages and reject the entire command
+	// with -ERR if any id is malformed (RFC 1939 §7 grammar) or duplicated (§7
+	// requires ids unique within the maildrop; a duplicate breaks leave-on-server
+	// de-duplication).
+	seen := make(map[string]bool, len(s.messages))
+	for i, msg := range s.messages {
+		if s.deleted[i+1] {
+			continue
+		}
+		if !validUID(msg.UID) {
+			slog.Error("pop3: backend supplied invalid UIDL unique-id",
+				"remote", s.conn.RemoteAddr(),
+				"msg", i+1,
+				"uidlen", len(msg.UID),
+			)
+			s.err("Invalid unique-id in maildrop")
+			return
+		}
+		if seen[msg.UID] {
+			slog.Error("pop3: duplicate UIDL unique-id in maildrop",
+				"remote", s.conn.RemoteAddr(),
+				"msg", i+1,
+			)
+			s.err("Duplicate unique-id in maildrop")
+			return
+		}
+		seen[msg.UID] = true
+	}
+
 	s.ok("")
 	for i, msg := range s.messages {
 		if !s.deleted[i+1] {
