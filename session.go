@@ -147,7 +147,7 @@ func (s *Session) Handle() {
 			s.handleDele(arg)
 		case "NOOP":
 			if !s.rejectArg(arg) {
-				s.ok("")
+				s.handleNoop()
 			}
 		case "RSET":
 			if !s.rejectArg(arg) {
@@ -534,7 +534,26 @@ func (s *Session) handleDele(arg string) {
 	s.ok("Message %d deleted", n)
 }
 
+// handleNoop answers NOOP. NOOP is a TRANSACTION-state command (RFC 1939 §5):
+// like every other post-authentication command it is refused with -ERR while the
+// session is still in AUTHORIZATION (issue #11).
+func (s *Session) handleNoop() {
+	if !s.auth.authenticated {
+		s.err("Not authenticated")
+		return
+	}
+	s.ok("")
+}
+
 func (s *Session) handleRset() {
+	// RSET resets the maildrop and is only meaningful once a maildrop is open, so
+	// it belongs to the TRANSACTION state (RFC 1939 §5). Reject it before
+	// authentication rather than reporting +OK on a maildrop that does not yet
+	// exist (issue #11).
+	if !s.auth.authenticated {
+		s.err("Not authenticated")
+		return
+	}
 	s.deleted = make(map[int]bool)
 	s.ok("Maildrop has %d messages", len(s.messages))
 }

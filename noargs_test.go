@@ -145,8 +145,12 @@ func TestPOP3_STLSRejectsSpuriousArgs(t *testing.T) {
 	if strings.Contains(got, "Begin TLS") {
 		t.Fatalf("STLS junk started TLS negotiation: %q", got)
 	}
-	// No handshake was attempted, so the plaintext session remains usable.
-	if got := h.cmd("NOOP"); !strings.HasPrefix(got, "+OK") {
-		t.Errorf("session unusable after rejected STLS: NOOP = %q", got)
+	// No handshake was attempted, so the plaintext session remains usable. Probe
+	// with CAPA, an AUTHORIZATION-state command (RFC 2449) — NOOP is now rejected
+	// before authentication (issue #11) and so cannot serve as a pre-auth liveness
+	// check here.
+	if got := h.cmd("CAPA"); !strings.HasPrefix(got, "+OK") {
+		t.Errorf("session unusable after rejected STLS: CAPA = %q", got)
 	}
+	_ = h.readDotBody()
 }
