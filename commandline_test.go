@@ -52,8 +52,12 @@ func TestPOP3_LongButBoundedCommandStillWorks(t *testing.T) {
 	if got := h.cmd("%s", long); !strings.HasPrefix(got, "-ERR") {
 		t.Errorf("long-but-bounded command: got %q, want a normal -ERR reply", got)
 	}
-	// Session must remain usable afterwards.
-	if got := h.cmd("NOOP"); !strings.HasPrefix(got, "+OK") {
-		t.Errorf("session unusable after long-but-bounded command: NOOP = %q", got)
+	// Session must remain usable afterwards. Probe with CAPA, an AUTHORIZATION-state
+	// command (RFC 2449): this harness never authenticates, and NOOP is now rejected
+	// before authentication (issue #11), so it can no longer serve as a pre-auth
+	// liveness check here.
+	if got := h.cmd("CAPA"); !strings.HasPrefix(got, "+OK") {
+		t.Errorf("session unusable after long-but-bounded command: CAPA = %q", got)
 	}
+	_ = h.readDotBody()
 }
