@@ -238,16 +238,21 @@ func (s *Session) handlePass(arg string) {
 		return
 	}
 
-	s.auth.authenticated = true
-	s.mailbox = mailbox
-
-	// Load maildrop contents.
+	// Open the maildrop as part of entering TRANSACTION state (RFC 1939 §4). The
+	// session must not be marked authenticated until the message list is loaded:
+	// if the load fails after we flip the flag, the client is wedged in
+	// TRANSACTION with a phantom empty maildrop and cannot re-authenticate.
 	messages, err := mailbox.Messages()
 	if err != nil {
 		slog.Error("pop3: failed to load mailbox", "error", err)
 		s.err("Failed to load mailbox")
+		s.auth.username = "" // stay in AUTHORIZATION; client may retry
 		return
 	}
+
+	// The load succeeded: commit the session to TRANSACTION state atomically.
+	s.auth.authenticated = true
+	s.mailbox = mailbox
 	s.messages = messages
 
 	slog.Info("pop3: authenticated", "remote", s.conn.RemoteAddr(), "user", s.auth.username, "messages", len(s.messages))
