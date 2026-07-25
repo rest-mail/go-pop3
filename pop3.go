@@ -9,9 +9,10 @@
 // Backend can be a database, a filesystem, or a remote API.
 //
 // The message body served by RETR and TOP is whatever [Mailbox.Retrieve]
-// returns, byte-for-byte, with RFC 1939 dot-stuffing applied on the wire.
-// Messages the client DELEtes are only removed on QUIT, matching RFC 1939
-// update-state semantics.
+// returns, with its line endings canonicalized to CRLF and RFC 1939
+// dot-stuffing applied on the wire; the reported octet count is that of the
+// canonical form. Messages the client DELEtes are only removed on QUIT,
+// matching RFC 1939 update-state semantics.
 //
 // # Backend
 //
@@ -78,8 +79,10 @@ type Mailbox interface {
 	// Messages returns the maildrop contents oldest-first. It is called once,
 	// immediately after authentication.
 	Messages() ([]Message, error)
-	// Retrieve returns the full RFC 5322 bytes of the message with the given UID,
-	// served verbatim (subject to dot-stuffing) by RETR and TOP.
+	// Retrieve returns the full RFC 5322 bytes of the message with the given UID.
+	// RETR and TOP serve these bytes with line endings canonicalized to CRLF and
+	// RFC 1939 dot-stuffing applied; a bare LF in the returned bytes is treated
+	// as a line boundary and normalized to CRLF on the wire.
 	Retrieve(uid string) ([]byte, error)
 	// MarkSeen flags a message read after a successful RETR. POP3 has no read
 	// state of its own; implementations without one may return nil.

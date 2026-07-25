@@ -93,3 +93,29 @@ func TestParseCommand_ArgWithSpaces(t *testing.T) {
 		t.Errorf("expected arg 'my secret password', got %q", arg)
 	}
 }
+
+// ── canonicalCRLF ────────────────────────────────────────────────────
+
+func TestCanonicalCRLF(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"crlf idempotent", "a\r\nb\r\n", "a\r\nb\r\n"},
+		{"bare lf to crlf", "a\nb\n", "a\r\nb\r\n"},
+		{"mixed endings", "a\r\nb\nc", "a\r\nb\r\nc"},
+		{"lone dot line via bare lf", "x\n.\ny\n", "x\r\n.\r\ny\r\n"},
+		{"bare cr not before lf kept", "a\rb", "a\rb"},
+		{"crlf not doubled", "a\r\n", "a\r\n"},
+		{"no trailing terminator", "abc", "abc"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := canonicalCRLF(tc.in); got != tc.want {
+				t.Errorf("canonicalCRLF(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

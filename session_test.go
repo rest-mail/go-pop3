@@ -170,6 +170,99 @@ func TestPOP3_DeleCommittedOnQuit(t *testing.T) {
 	}
 }
 
+// rawBareLF exercises the bare-LF hazard (RFC 1939 §3): a stored message whose
+// lines end in a bare LF rather than CRLF, including a line that is exactly "."
+// and a line beginning with ".". Both must be dot-stuffed and re-framed with
+// CRLF so a bare LF cannot forge the "." terminator or desync the session.
+const rawBareLF = "From: Eve <eve@example.com>\n" +
+	"Subject: Bare LF\n" +
+	"\n" +
+	"line1\n" +
+	".\n" + // a line that is exactly "." — must be stuffed to ".."
+	".hidden\n" + // a line beginning with "." after bare LF — must be stuffed
+	"line4\n"
+
+// containsLine reports whether lines holds an element equal to want.
+func containsLine(lines []string, want string) bool {
+	for _, l := range lines {
+		if l == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPOP3_RetrBareLFDotStuffing(t *testing.T) {
+	m := newMockBackend()
+	m.seed("7", 100, rawBareLF)
+	h := newPOP3Harness(t, m)
+	h.login()
+
+	if got := h.cmd("RETR 1"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("RETR header = %q", got)
+	}
+	body := h.readDotBody()
+
+	// A bare-LF "." line must not prematurely terminate RETR: content after it
+	// (line4) must still arrive.
+	if !containsLine(body, "line4") {
+		t.Errorf("RETR terminated early on a bare-LF '.' line; body = %v", body)
+	}
+	// The exactly-"." line must be dot-stuffed to "..".
+	if !containsLine(body, "..") {
+		t.Errorf("bare-LF '.' line was not dot-stuffed to '..'; body = %v", body)
+	}
+	// A bare-LF line beginning with "." must be dot-stuffed to "..hidden".
+	if !containsLine(body, "..hidden") {
+		t.Errorf("bare-LF '.hidden' line was not dot-stuffed; body = %v", body)
+	}
+	if containsLine(body, ".hidden") {
+		t.Errorf("bare-LF '.hidden' line reached the wire unstuffed; body = %v", body)
+	}
+
+	// The session must not be desynchronized: the next command gets its own
+	// reply, not leftover message bytes.
+	if got := h.cmd("NOOP"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("session desynced after bare-LF RETR: NOOP = %q", got)
+	}
+}
+
+func TestPOP3_TopBareLFDotStuffing(t *testing.T) {
+	m := newMockBackend()
+	m.seed("7", 100, rawBareLF)
+	h := newPOP3Harness(t, m)
+	h.login()
+
+	// Request more body lines than exist, so the whole (bare-LF) body is served.
+	if got := h.cmd("TOP 1 5"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("TOP header = %q", got)
+	}
+	body := h.readDotBody()
+
+	// Header/body split must survive bare-LF separators, and body content after
+	// the bare-LF "." line must not be truncated.
+	if !containsLine(body, "Subject: Bare LF") {
+		t.Errorf("TOP dropped headers on bare-LF message; body = %v", body)
+	}
+	if !containsLine(body, "line4") {
+		t.Errorf("TOP terminated early on a bare-LF '.' line; body = %v", body)
+	}
+	if !containsLine(body, "..") {
+		t.Errorf("bare-LF '.' line was not dot-stuffed to '..'; body = %v", body)
+	}
+	if !containsLine(body, "..hidden") {
+		t.Errorf("bare-LF '.hidden' line was not dot-stuffed; body = %v", body)
+	}
+
+	if got := h.cmd("NOOP"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("session desynced after bare-LF TOP: NOOP = %q", got)
+	}
+	// TOP must not mark the message seen.
+	if m.mbox.wasMarkedSeen("7") {
+		t.Errorf("TOP unexpectedly marked message 7 as seen")
+	}
+}
+
 func TestPOP3_AuthFailureRejected(t *testing.T) {
 	m := newMockBackend()
 	seedThree(m)
