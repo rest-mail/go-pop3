@@ -22,6 +22,11 @@ type mockMailbox struct {
 	// Recorded side effects, for assertions.
 	seen    []string
 	deletes []string
+
+	// deleteErr, when non-nil, makes Delete fail (simulating a backend whose
+	// UPDATE-phase expunge could not commit). The UID is still recorded so tests
+	// can assert Delete was attempted.
+	deleteErr error
 }
 
 // mockBackend authenticates one user and hands out a shared mockMailbox.
@@ -83,7 +88,14 @@ func (m *mockMailbox) Delete(uid string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.deletes = append(m.deletes, uid)
-	return nil
+	return m.deleteErr
+}
+
+// failDelete arms the mailbox so subsequent Delete calls return err.
+func (m *mockMailbox) failDelete(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deleteErr = err
 }
 
 func (m *mockMailbox) deletedUIDs() []string {

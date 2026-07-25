@@ -1,6 +1,7 @@
 package pop3
 
 import (
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -167,6 +168,35 @@ func TestPOP3_DeleCommittedOnQuit(t *testing.T) {
 	// The commit happens on QUIT, and targets the real message UID (9), not seq 2.
 	if got := m.mbox.deletedUIDs(); !reflect.DeepEqual(got, []string{"9"}) {
 		t.Errorf("committed deletes = %v, want [9]", got)
+	}
+}
+
+// TestPOP3_QuitReportsDeleteFailure asserts that when the UPDATE-phase expunge
+// fails, QUIT answers -ERR rather than +OK. A +OK would tell the client its
+// DELEtes committed when the messages are still present, causing the client to
+// forget mail it never actually removed (RFC 1939 §6: the server MAY reply -ERR
+// when some deleted messages could not be removed).
+func TestPOP3_QuitReportsDeleteFailure(t *testing.T) {
+	m := newMockBackend()
+	seedThree(m)
+	h := newPOP3Harness(t, m)
+	h.login()
+
+	if got := h.cmd("DELE 2"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("DELE 2 = %q", got)
+	}
+
+	// Arm the backend so the commit on QUIT fails.
+	m.mbox.failDelete(errors.New("store offline"))
+
+	got := h.cmd("QUIT")
+	if !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("QUIT after failed delete = %q, want -ERR...", got)
+	}
+
+	// The failure must not be silent: Delete was still attempted on the UID.
+	if d := m.mbox.deletedUIDs(); !reflect.DeepEqual(d, []string{"9"}) {
+		t.Errorf("attempted deletes = %v, want [9]", d)
 	}
 }
 

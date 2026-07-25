@@ -527,14 +527,26 @@ func (s *Session) handleRset() {
 }
 
 func (s *Session) handleQuit() {
-	// Actually delete marked messages
+	// Enter the UPDATE state (RFC 1939 §6): commit every message the client
+	// marked for deletion. If any commit fails, the maildrop update did not fully
+	// succeed, so we must NOT report +OK — a +OK tells the client its DELEtes are
+	// durable and it may drop local copies, silently losing mail that is still on
+	// the server (and leaving UIDLs the client believes are gone). Attempt every
+	// deletion regardless, then answer -ERR when any of them failed.
+	failed := false
 	for n := range s.deleted {
 		if n >= 1 && n <= len(s.messages) {
 			msg := s.messages[n-1]
 			if err := s.mailbox.Delete(msg.UID); err != nil {
 				slog.Error("pop3: failed to delete message", "uid", msg.UID, "error", err)
+				failed = true
 			}
 		}
+	}
+
+	if failed {
+		s.err("some deleted messages not removed")
+		return
 	}
 
 	s.ok("POP3 server signing off")
