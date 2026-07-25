@@ -13,3 +13,37 @@ func parseCommand(line string) (string, string) {
 	}
 	return cmd, arg
 }
+
+// canonicalCRLF rewrites a stored message's line endings to canonical CRLF for
+// POP3 transmission (RFC 1939 §3). Every LF becomes CRLF, an existing CR that
+// already precedes an LF is kept (not doubled), and a bare CR not followed by
+// LF is passed through verbatim (it is not a line terminator).
+//
+// This is a security boundary, not cosmetics: RETR/TOP frame the multi-line
+// response by splitting on CRLF and dot-stuffing each line. A bare LF in
+// attacker-controllable message content would otherwise survive inside a line,
+// smuggling a raw line boundary onto the wire that evades dot-stuffing and can
+// forge the "CRLF.CRLF" terminator (premature termination, session desync,
+// response forgery). Canonicalizing first guarantees every wire line boundary
+// is a real CRLF the stuffing and terminator logic can see.
+func canonicalCRLF(raw string) string {
+	var b strings.Builder
+	b.Grow(len(raw) + 16)
+	for i := 0; i < len(raw); i++ {
+		switch raw[i] {
+		case '\n':
+			// Bare LF (a preceding CR was already consumed by the '\r' case).
+			b.WriteString("\r\n")
+		case '\r':
+			if i+1 < len(raw) && raw[i+1] == '\n' {
+				b.WriteString("\r\n")
+				i++ // consume the paired LF
+			} else {
+				b.WriteByte('\r') // bare CR: not a terminator, keep verbatim
+			}
+		default:
+			b.WriteByte(raw[i])
+		}
+	}
+	return b.String()
+}

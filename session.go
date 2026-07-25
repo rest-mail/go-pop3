@@ -335,7 +335,10 @@ func (s *Session) handleRetr(arg string) {
 		s.err("Failed to retrieve message")
 		return
 	}
-	raw := string(rawBytes)
+	// Canonicalize line endings to CRLF first: a bare LF in stored content must
+	// not survive inside a line, or it would evade dot-stuffing and could forge
+	// the "." terminator. Octets are counted on this canonical wire form.
+	raw := canonicalCRLF(string(rawBytes))
 
 	s.ok("%d octets", len(raw))
 	// Send message, byte-stuffing lines starting with "."
@@ -385,7 +388,9 @@ func (s *Session) handleTop(arg string) {
 		s.err("Failed to retrieve message")
 		return
 	}
-	raw := string(rawBytes)
+	// Canonicalize line endings to CRLF first, so a bare LF cannot hide a line
+	// boundary from the header/body split or the per-line dot-stuffing below.
+	raw := canonicalCRLF(string(rawBytes))
 
 	// Split into headers and body
 	headerEnd := strings.Index(raw, "\r\n\r\n")
