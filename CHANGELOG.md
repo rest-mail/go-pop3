@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **`Server.Shutdown` now takes a `context.Context` and actually drains
+  in-flight sessions.** It previously waited only on the accept-loop goroutines —
+  which return the moment their listener closes — so it returned while client
+  sessions were still being served, contradicting its "drains them gracefully"
+  documentation. Each accepted connection is now tracked in the server's
+  `sync.WaitGroup`, and `Shutdown(ctx)` closes the listeners and then blocks
+  until every session finishes, or until `ctx` is done (returning `ctx.Err()`),
+  mirroring `net/http.Server.Shutdown`. A new `Server.Close()` provides the
+  immediate hard stop: it force-closes live connections without waiting.
+
 ### Fixed
 
 - **No-argument commands now reject a spurious trailing argument with `-ERR`.**
