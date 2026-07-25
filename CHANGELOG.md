@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **Command lines are now length-bounded, closing a pre-auth memory DoS.**
+  Command lines were read with an unbounded `bufio.Reader.ReadString('\n')`, so a
+  client — before authenticating — could stream an arbitrarily large "line" with
+  no CRLF and force the process to buffer all of it, exhausting memory. The reader
+  is now capped at a generous per-line limit (RFC 1939 §3 commands are tiny); a
+  line that exceeds it is refused with `-ERR` and the connection is closed rather
+  than buffered without limit.
+
 ## v0.1.2
 
 ### Fixed

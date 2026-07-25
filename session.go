@@ -3,6 +3,7 @@ package pop3
 import (
 	"bufio"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,6 +12,17 @@ import (
 	"strings"
 	"time"
 )
+
+// maxCommandLine bounds a single client command line, including its CRLF. RFC
+// 1939 §3 keeps commands tiny (a keyword plus short arguments), so this is far
+// more than any legitimate line yet small enough that a pre-authentication
+// client cannot exhaust memory by streaming an unterminated line. The command
+// reader's buffer is sized to this cap; see [Session.readCommandLine].
+const maxCommandLine = 1024
+
+// errLineTooLong reports that a command line exceeded [maxCommandLine] bytes
+// without a terminating LF.
+var errLineTooLong = errors.New("command line too long")
 
 // Session represents a single POP3 conversation with a client.
 type Session struct {
@@ -42,7 +54,7 @@ func NewSession(conn net.Conn, backend Backend, tlsConfig *tls.Config, limiter L
 	}
 	return &Session{
 		conn:      conn,
-		reader:    bufio.NewReader(conn),
+		reader:    bufio.NewReaderSize(conn, maxCommandLine),
 		writer:    bufio.NewWriter(conn),
 		backend:   backend,
 		tlsConfig: tlsConfig,
@@ -80,8 +92,19 @@ func (s *Session) Handle() {
 	for {
 		_ = s.conn.SetDeadline(time.Now().Add(10 * time.Minute))
 
-		line, err := s.reader.ReadString('\n')
+		line, err := s.readCommandLine()
 		if err != nil {
+			if errors.Is(err, errLineTooLong) {
+				// A client streamed a command line past the cap (likely hostile,
+				// possibly pre-auth). Refuse it and drop the connection rather than
+				// attempt to resynchronize on a line we deliberately truncated.
+				slog.Warn("pop3: command line too long",
+					"remote", s.conn.RemoteAddr(),
+					"limit", maxCommandLine,
+				)
+				s.err("Command line too long")
+				return
+			}
 			slog.Debug("pop3: connection closed", "remote", s.conn.RemoteAddr(), "error", err)
 			return
 		}
@@ -131,6 +154,23 @@ func (s *Session) Handle() {
 	}
 }
 
+// readCommandLine reads one LF-terminated command line, refusing to buffer more
+// than [maxCommandLine] bytes. The underlying [bufio.Reader] is sized to that
+// cap, so ReadSlice returns [bufio.ErrBufferFull] the instant a line fills the
+// buffer without an LF — the overflow signal we surface as [errLineTooLong]
+// instead of letting an unterminated line grow without limit. The returned slice
+// aliases the reader's buffer, so it is copied into a string before returning.
+func (s *Session) readCommandLine() (string, error) {
+	line, err := s.reader.ReadSlice('\n')
+	if errors.Is(err, bufio.ErrBufferFull) {
+		return "", errLineTooLong
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(line), nil
+}
+
 func (s *Session) handleCapa() {
 	s.ok("Capability list follows")
 	s.sendLine("USER")
@@ -163,7 +203,7 @@ func (s *Session) handleSTLS() bool {
 	}
 
 	s.conn = tlsConn
-	s.reader = bufio.NewReader(tlsConn)
+	s.reader = bufio.NewReaderSize(tlsConn, maxCommandLine)
 	s.writer = bufio.NewWriter(tlsConn)
 	s.usingTLS = true
 
