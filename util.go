@@ -14,6 +14,33 @@ func parseCommand(line string) (string, string) {
 	return cmd, arg
 }
 
+// credentialCommands are POP3 verbs whose arguments carry secret material that
+// must never be written to logs: PASS (the cleartext password), APOP (a digest
+// derived from the shared secret, replayable/attackable if leaked), and AUTH
+// (SASL initial responses, which base64-encode credentials). Keys are the
+// upper-cased command keyword as returned by parseCommand.
+var credentialCommands = map[string]bool{
+	"PASS": true,
+	"APOP": true,
+	"AUTH": true,
+}
+
+// redactCommand returns a log-safe rendering of a raw client command line. For
+// credential-bearing verbs (see credentialCommands) the entire argument is
+// replaced with a fixed marker so no secret — password, auth digest, or SASL
+// response — reaches the logs; the command keyword is preserved for
+// debuggability. Every other command line is returned verbatim.
+//
+// This is the redaction boundary for issue #10: the per-command debug log used
+// to record the full raw line, writing "PASS <password>" in cleartext.
+func redactCommand(line string) string {
+	cmd, arg := parseCommand(line)
+	if arg != "" && credentialCommands[cmd] {
+		return cmd + " <redacted>"
+	}
+	return line
+}
+
 // canonicalCRLF rewrites a stored message's line endings to canonical CRLF for
 // POP3 transmission (RFC 1939 §3). Every LF becomes CRLF, an existing CR that
 // already precedes an LF is kept (not doubled), and a bare CR not followed by
