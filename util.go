@@ -47,3 +47,21 @@ func canonicalCRLF(raw string) string {
 	}
 	return b.String()
 }
+
+// splitMessageLines splits a canonical CRLF message block into the lines to
+// transmit for RETR/TOP. A well-formed block ends in CRLF, so strings.Split on
+// "\r\n" yields a trailing "" that is the terminator of the final line, not a
+// separate empty line. splitMessageLines drops that single trailing empty
+// element so callers do not emit a spurious blank line before the "."
+// terminator (RFC 1939 §5.1/§7); the transmitted octets then equal the
+// advertised count (§11). An empty block yields no lines.
+func splitMessageLines(block string) []string {
+	if block == "" {
+		return nil
+	}
+	lines := strings.Split(block, "\r\n")
+	if n := len(lines); lines[n-1] == "" {
+		lines = lines[:n-1]
+	}
+	return lines
+}
