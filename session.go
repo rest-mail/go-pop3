@@ -377,8 +377,11 @@ func (s *Session) handleRetr(arg string) {
 	raw := canonicalCRLF(string(rawBytes))
 
 	s.ok("%d octets", len(raw))
-	// Send message, byte-stuffing lines starting with "."
-	for _, line := range strings.Split(raw, "\r\n") {
+	// Send message, byte-stuffing lines starting with ".". splitMessageLines
+	// drops the trailing "" that strings.Split leaves for the final line's CRLF,
+	// so no spurious blank line is emitted before the "." terminator and the
+	// transmitted octets match the advertised count (RFC 1939 §5.1/§11).
+	for _, line := range splitMessageLines(raw) {
 		s.sendStuffed(line)
 	}
 	s.sendLine(".")
@@ -435,17 +438,19 @@ func (s *Session) handleTop(arg string) {
 	}
 
 	s.ok("")
-	// Send headers
-	headers := raw[:headerEnd]
-	for _, line := range strings.Split(headers, "\r\n") {
+	// Send headers. splitMessageLines drops the trailing "" that strings.Split
+	// leaves when the header block ends in CRLF (a headers-only message), so no
+	// phantom header line is emitted (RFC 1939 §7).
+	for _, line := range splitMessageLines(raw[:headerEnd]) {
 		s.sendStuffed(line)
 	}
 	s.sendLine("") // blank line separating headers from body
 
-	// Send requested number of body lines
+	// Send requested number of body lines. splitMessageLines drops the trailing
+	// "" from the body's final CRLF so it is never counted or emitted as an extra
+	// blank line when the requested count meets or exceeds the body length.
 	if headerEnd+4 <= len(raw) {
-		body := raw[headerEnd+4:] // skip \r\n\r\n
-		bodyLines := strings.Split(body, "\r\n")
+		bodyLines := splitMessageLines(raw[headerEnd+4:]) // skip \r\n\r\n
 		if lines > len(bodyLines) {
 			lines = len(bodyLines)
 		}
