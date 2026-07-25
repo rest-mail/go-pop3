@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`STLS` is now refused after authentication.** `STLS` (STARTTLS for POP3,
+  RFC 2595) belongs to the AUTHORIZATION state, but the handler gated it only on
+  the current TLS status, so a connection that reached TRANSACTION while still
+  cleartext could begin a TLS handshake after `PASS`. It is now answered `-ERR`
+  once the session is authenticated, before any negotiation begins.
+- **The failed-authentication ban is now enforced at connection accept.** The
+  ban was consulted only after a failed `PASS`, so a banned IP could still open a
+  connection and spend one fresh authentication attempt on every reconnect. The
+  accept loop now checks the ban list up front and drops a banned client before a
+  session is created.
 - **No-argument commands now reject a spurious trailing argument with `-ERR`.**
   `STAT`, `RSET`, `NOOP`, `QUIT`, `STLS`, and `CAPA` take no arguments (RFC 1939
   §3, RFC 2595, RFC 2449), but a trailing token was silently dropped and the

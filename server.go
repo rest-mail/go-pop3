@@ -100,6 +100,18 @@ func (s *Server) acceptLoop(listener net.Listener, implicitTLS bool) {
 		}
 
 		ip := extractIP(conn.RemoteAddr().String())
+
+		// Consult the ban list at accept time (issue #17): a client whose repeated
+		// authentication failures earned a ban is dropped up front, before a session
+		// is created and before it can spend another authentication attempt.
+		// Previously the ban was re-checked only after a failed PASS, so a banned IP
+		// could reconnect and make one fresh attempt on every connection.
+		if s.limiter.IsBanned(ip) {
+			slog.Warn("pop3: connection rejected, banned", "ip", ip)
+			_ = conn.Close()
+			continue
+		}
+
 		if !s.limiter.Accept(ip) {
 			slog.Warn("pop3: connection rejected by limiter", "ip", ip)
 			_ = conn.Close()

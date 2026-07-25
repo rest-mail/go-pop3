@@ -198,6 +198,18 @@ func (s *Session) handleCapa() {
 }
 
 func (s *Session) handleSTLS() bool {
+	// STLS belongs to the AUTHORIZATION state (RFC 2595 §3): it may be issued only
+	// before authentication, so the USER/PASS exchange that follows is protected by
+	// the freshly negotiated TLS layer. Once the session has entered TRANSACTION
+	// state the command is out of sequence — upgrading an already-authenticated
+	// connection serves no purpose — and must be refused with -ERR regardless of
+	// the current TLS status (issue #17). This state check precedes the usingTLS
+	// check so an authenticated session gets the correct "out of sequence" reason
+	// rather than an incidental "already using TLS".
+	if s.auth.authenticated {
+		s.err("Command only valid before authentication")
+		return false
+	}
 	if s.usingTLS {
 		s.err("Already using TLS")
 		return false
