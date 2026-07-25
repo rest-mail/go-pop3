@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No-argument commands now reject a spurious trailing argument with `-ERR`.**
+  `STAT`, `RSET`, `NOOP`, `QUIT`, `STLS`, and `CAPA` take no arguments (RFC 1939
+  §3, RFC 2595, RFC 2449), but a trailing token was silently dropped and the
+  command still succeeded — `STAT junk` answered `+OK`. Such a line is a syntax
+  error and is now refused with `-ERR`, leaving session state untouched (a
+  mistyped `QUIT` no longer enters the UPDATE phase and commits deletions). The
+  bare forms and every argument-taking command are unaffected.
 - **Command lines are now length-bounded, closing a pre-auth memory DoS.**
   Command lines were read with an unbounded `bufio.Reader.ReadString('\n')`, so a
   client — before authenticating — could stream an arbitrarily large "line" with

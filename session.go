@@ -120,9 +120,11 @@ func (s *Session) Handle() {
 
 		switch cmd {
 		case "CAPA":
-			s.handleCapa()
+			if !s.rejectArg(arg) {
+				s.handleCapa()
+			}
 		case "STLS":
-			if s.handleSTLS() {
+			if !s.rejectArg(arg) && s.handleSTLS() {
 				return
 			}
 		case "USER":
@@ -130,7 +132,9 @@ func (s *Session) Handle() {
 		case "PASS":
 			s.handlePass(arg)
 		case "STAT":
-			s.handleStat()
+			if !s.rejectArg(arg) {
+				s.handleStat()
+			}
 		case "LIST":
 			s.handleList(arg)
 		case "UIDL":
@@ -142,12 +146,21 @@ func (s *Session) Handle() {
 		case "DELE":
 			s.handleDele(arg)
 		case "NOOP":
-			s.ok("")
+			if !s.rejectArg(arg) {
+				s.ok("")
+			}
 		case "RSET":
-			s.handleRset()
+			if !s.rejectArg(arg) {
+				s.handleRset()
+			}
 		case "QUIT":
-			s.handleQuit()
-			return
+			// A spurious argument makes QUIT a syntax error: reject it and stay in
+			// the current state rather than entering the UPDATE phase, so a client
+			// that mistyped the line does not unintentionally commit deletions.
+			if !s.rejectArg(arg) {
+				s.handleQuit()
+				return
+			}
 		default:
 			s.err("Unknown command")
 		}
@@ -550,6 +563,23 @@ func (s *Session) handleQuit() {
 	}
 
 	s.ok("POP3 server signing off")
+}
+
+// rejectArg reports whether a no-argument command carried an unexpected
+// argument. STAT, RSET, NOOP, and QUIT (RFC 1939 §3), together with STLS
+// (RFC 2595) and CAPA (RFC 2449), are defined to take no arguments, so a
+// trailing token makes the command line a syntax error that must be answered
+// -ERR rather than silently ignored (issue #14). When arg is non-empty this
+// writes the -ERR reply and returns true; the caller then skips the handler and
+// leaves session state untouched. An empty arg returns false so the handler
+// runs normally. Only a non-whitespace token counts as an argument, so a stray
+// trailing space is tolerated rather than treated as a syntax error.
+func (s *Session) rejectArg(arg string) bool {
+	if strings.TrimSpace(arg) != "" {
+		s.err("Command accepts no arguments")
+		return true
+	}
+	return false
 }
 
 // ── Output helpers ────────────────────────────────────────────────────
