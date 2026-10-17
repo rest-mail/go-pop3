@@ -120,3 +120,35 @@ func splitMessageLines(block string) []string {
 	}
 	return lines
 }
+
+// dotStuff applies RFC 1939 §3 byte-stuffing to one line of a multi-line
+// response: a line beginning with the termination octet "." gets one more "."
+// prepended, so no content line can be read as the "." terminator. The client
+// removes exactly one leading "." from any line that begins with one.
+func dotStuff(line string) string {
+	if strings.HasPrefix(line, ".") {
+		return "." + line
+	}
+	return line
+}
+
+// topLines returns the lines TOP sends for a canonical CRLF message (RFC 1939
+// §7): the header lines, the empty line separating them from the body, and at
+// most n (n >= 0) body lines. The header section ends at the first empty line
+// (RFC 5322 §2.1): a message with no empty line is all header, and a message
+// that begins with an empty line has no header fields, so none of its body is
+// sent as header.
+func topLines(raw string, n int) []string {
+	header, body := raw, ""
+	if strings.HasPrefix(raw, "\r\n") {
+		header, body = "", raw[2:]
+	} else if i := strings.Index(raw, "\r\n\r\n"); i >= 0 {
+		header, body = raw[:i], raw[i+4:]
+	}
+	lines := append(splitMessageLines(header), "")
+	bodyLines := splitMessageLines(body)
+	if n > len(bodyLines) {
+		n = len(bodyLines)
+	}
+	return append(lines, bodyLines[:n]...)
+}
