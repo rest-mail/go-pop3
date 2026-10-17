@@ -91,6 +91,21 @@ func canonicalCRLF(raw string) string {
 	return b.String()
 }
 
+// wireMessage returns a stored message as RETR transmits it and an RFC 1939 §3
+// client decodes it: line endings canonicalized to CRLF (see canonicalCRLF), and
+// a final CRLF added when the message does not already end in one. Every line of
+// a multi-line response ends in CRLF, so a last line stored without an
+// end-of-line still gets one on the wire; it is part of what the client
+// receives, so it is part of the §11 octet count. An empty message stays empty.
+// Byte-stuffing and the "." terminator are framing and are not included.
+func wireMessage(raw string) string {
+	msg := canonicalCRLF(raw)
+	if msg != "" && !strings.HasSuffix(msg, "\r\n") {
+		msg += "\r\n"
+	}
+	return msg
+}
+
 // maxUIDLen is the RFC 1939 §7 upper bound on a UIDL unique-id: a unique-id is
 // "1 to 70 characters in the range 0x21 to 0x7E".
 const maxUIDLen = 70

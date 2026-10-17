@@ -371,52 +371,64 @@ func FuzzMessageFraming(f *testing.F) {
 		if rest != "" {
 			t.Fatalf("framing %q terminated early, %q left after the terminator", raw, rest)
 		}
-		// The client sees the message with every end-of-line as CRLF.
+		// The client sees the message with every end-of-line as CRLF, and a last
+		// line stored without one ends in the CRLF that ends every line of a
+		// multi-line response (RFC 1939 §3).
 		want := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n", "\r\n")
-		if want == "" || strings.HasSuffix(want, "\r\n") {
-			if got != want {
-				t.Fatalf("framing %q decoded to %q, want %q", raw, got, want)
-			}
-			if n := OctetCount(raw); n != len(got) {
-				t.Fatalf("OctetCount(%q) = %d, client received %d octets", raw, n, len(got))
-			}
-			return
+		if want != "" && !strings.HasSuffix(want, "\r\n") {
+			want += "\r\n"
 		}
-		// A message without a final end-of-line gains one on the wire, since every
-		// line of a multi-line response ends in CRLF; OctetCount counts the stored
-		// form, two octets fewer. Pinned so a change here is a deliberate one.
-		if got != want+"\r\n" {
-			t.Fatalf("framing unterminated %q decoded to %q, want %q", raw, got, want+"\r\n")
+		if got != want {
+			t.Fatalf("framing %q decoded to %q, want %q", raw, got, want)
 		}
-		if n := OctetCount(raw); n != len(got)-2 {
+		// The advertised size is what the client decoded: no stuffed dots, no
+		// terminator (RFC 1939 §11).
+		if n := OctetCount(raw); n != len(got) {
 			t.Fatalf("OctetCount(%q) = %d, client received %d octets", raw, n, len(got))
 		}
 	})
 }
 
 // FuzzOctetCount checks OctetCount against a direct count of RFC 1939 §11
-// octets (every octet once, a lone LF end-of-line as two) and that counting is
-// additive over concatenation except where a CR and an LF join into one CRLF.
+// octets (every octet once, a lone LF end-of-line as two, and two for the CRLF
+// that ends an unterminated last line on the wire), and that counting is
+// additive over concatenation except where a's last line runs into b.
 func FuzzOctetCount(f *testing.F) {
 	for _, s := range messageSeeds {
 		f.Add([]byte(s), []byte("\n"))
 	}
 	f.Add([]byte("a\r"), []byte("\nb"))
+	f.Add([]byte("a"), []byte("b\r\n"))
 	f.Fuzz(func(t *testing.T, a, b []byte) {
 		skipOversized(t, string(a), string(b))
-		want := len(a) + bareLFs(string(a))
-		if got := OctetCount(a); got != want {
+		if got, want := OctetCount(a), directOctets(a); got != want {
 			t.Fatalf("OctetCount(%q) = %d, want %d", a, got, want)
 		}
 		joined := append(append([]byte{}, a...), b...)
 		sum := OctetCount(a) + OctetCount(b)
-		if len(a) > 0 && a[len(a)-1] == '\r' && len(b) > 0 && b[0] == '\n' {
-			sum-- // bare CR (1) + bare LF (2) become one CRLF (2)
+		if len(a) > 0 && len(b) > 0 {
+			if a[len(a)-1] != '\n' {
+				sum -= 2 // a's last line continues into b, so it gains no CRLF of its own
+			}
+			if a[len(a)-1] == '\r' && b[0] == '\n' {
+				sum-- // bare CR (1) + bare LF (2) become one CRLF (2)
+			}
 		}
 		if got := OctetCount(joined); got != sum {
 			t.Fatalf("OctetCount(%q) = %d, want %d from its parts", joined, got, sum)
 		}
 	})
+}
+
+// directOctets counts §11 octets without building the wire form: each stored
+// octet once, one more for each LF not preceded by CR, and two for the CRLF a
+// non-empty message not ending in LF is sent with.
+func directOctets(raw []byte) int {
+	n := len(raw) + bareLFs(string(raw))
+	if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+		n += 2
+	}
+	return n
 }
 
 // cutLines reads a canonical message line by line; a final line without CRLF
