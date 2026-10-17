@@ -4,14 +4,30 @@ import "strings"
 
 // parseCommand splits a POP3 command line into command and argument. The command
 // is upper-cased; the argument is the remainder of the line, if any.
+//
+// RFC 1939 §3 keywords are printable ASCII and case-insensitive, so only a-z are
+// upper-cased and every other byte is kept as sent. strings.ToUpper would apply
+// Unicode case mapping instead: "paſs" (U+017F) and "lıst" (U+0131) would be
+// dispatched as PASS and LIST, and invalid UTF-8 would be rewritten to U+FFFD.
 func parseCommand(line string) (string, string) {
 	parts := strings.SplitN(line, " ", 2)
-	cmd := strings.ToUpper(parts[0])
+	cmd := upperASCII(parts[0])
 	arg := ""
 	if len(parts) > 1 {
 		arg = parts[1]
 	}
 	return cmd, arg
+}
+
+// upperASCII upper-cases the ASCII letters of s and leaves every other byte alone.
+func upperASCII(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'a' <= c && c <= 'z' {
+			b[i] = c - ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 // credentialCommands are POP3 verbs whose arguments carry secret material that

@@ -13,6 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   body as header lines: `TOP n 0` sent every body line plus a stray blank line.
   `TOP` now ends the header section at the first empty line, so it sends that
   line and then at most the requested number of body lines (RFC 1939 §7).
+- **Command keywords fold ASCII case only.** RFC 1939 §3 keywords are printable
+  ASCII, but the parser upper-cased them with Unicode case mapping: `paſs`
+  (U+017F) logged in as `PASS`, `lıst` (U+0131) ran `LIST`, and invalid UTF-8 in a
+  keyword became U+FFFD. Only `a`-`z` are upper-cased now, so such a keyword is an
+  unknown command.
 
 ### Added
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,13 @@ var commandSeeds = []string{
 	"PASS ", "PASS", " PASS secret", "PASS\tsecret", "apop user digest",
 	"auth login", "paſs unicode-fold", "USER \x00\x01\x7f", "\xff\xfe PASS x",
 	"RETR 1\r", "RETR 1\r\n", "user\nPASS x", "PASS <redacted>",
+	"lıst", "quıt", "apoP\xff x", "\xffPASS x", "PASS\x80 x",
+}
+
+// rfcKeywords are the command keywords of RFC 1939 §4-§7, RFC 2449 and RFC 2595.
+var rfcKeywords = []string{
+	"USER", "PASS", "APOP", "QUIT", "STAT", "LIST", "RETR", "DELE", "NOOP",
+	"RSET", "TOP", "UIDL", "CAPA", "AUTH", "STLS",
 }
 
 // asciiUpper upper-cases only ASCII letters, byte by byte.
@@ -107,11 +115,13 @@ func FuzzParseCommand(f *testing.F) {
 			t.Fatalf("parseCommand(%q) keyword %q contains a SPACE", line, cmd)
 		}
 		keyword := splitKeyword(t, line, arg)
-		if !strings.EqualFold(cmd, keyword) {
-			t.Fatalf("parseCommand(%q) keyword %q is not a case fold of %q", line, cmd, keyword)
-		}
-		if isASCII(keyword) && cmd != asciiUpper(keyword) {
+		// Keywords are ASCII (RFC 1939 §3), so case-insensitive means ASCII case:
+		// a-z are upper-cased and every other byte is kept, never Unicode-mapped.
+		if cmd != asciiUpper(keyword) {
 			t.Fatalf("parseCommand(%q) keyword %q, want ASCII upper case %q", line, cmd, asciiUpper(keyword))
+		}
+		if !isASCII(keyword) && slices.Contains(rfcKeywords, cmd) {
+			t.Fatalf("parseCommand(%q) turned non-ASCII keyword %q into the command %q", line, keyword, cmd)
 		}
 		// Changing the case of the keyword changes nothing; the argument is
 		// returned verbatim, never case-mapped.
@@ -150,8 +160,8 @@ func FuzzRedactCommand(f *testing.F) {
 		cmd, arg := parseCommand(line)
 		keyword := splitKeyword(t, line, arg)
 		dispatchedAsCredential := cmd == "PASS" || cmd == "APOP" || cmd == "AUTH"
-		if credentialKeyword(keyword) && !dispatchedAsCredential {
-			t.Fatalf("keyword %q of %q is a credential command but parsed as %q", keyword, line, cmd)
+		if credentialKeyword(keyword) != dispatchedAsCredential {
+			t.Fatalf("keyword %q of %q: credential command %v, but parsed as %q", keyword, line, credentialKeyword(keyword), cmd)
 		}
 		if !dispatchedAsCredential || arg == "" {
 			if got != line {
