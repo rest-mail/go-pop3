@@ -31,6 +31,11 @@ so what the client downloads is exactly what you stored.
   `*tls.Config`.
 - Credentials are never sent in the clear: when TLS is configured, `USER` is
   refused until the connection is secured.
+- Credentials stay out of the debug log. Each received command line is logged at
+  debug level as follows: `PASS`, `APOP` and `AUTH` keep their keyword and log
+  `<redacted>` for the argument; other known commands are logged as sent; and
+  any other line, such as ` PASS x`, `PASS<TAB>x`, a lookalike like `paſs x` or a
+  password typed on its own, is logged only as `<unknown command redacted>`.
 - `CAPA` capability advertisement ([RFC 2449](https://www.rfc-editor.org/rfc/rfc2449)):
   `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `PIPELINING`.
 - Storage-agnostic `Backend`/`Mailbox` seam — mail can live anywhere.

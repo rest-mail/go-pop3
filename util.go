@@ -41,20 +41,57 @@ var credentialCommands = map[string]bool{
 	"AUTH": true,
 }
 
-// redactCommand returns a log-safe rendering of a raw client command line. For
-// credential-bearing verbs (see credentialCommands) the entire argument is
-// replaced with a fixed marker so no secret — password, auth digest, or SASL
-// response — reaches the logs; the command keyword is preserved for
-// debuggability. Every other command line is returned verbatim.
+// verbatimCommands are the keywords Session.Handle dispatches whose arguments
+// are not secret, so their lines may be logged as sent. Keys are the upper-cased
+// keyword as returned by parseCommand. A keyword missing from this set is masked
+// in full by redactCommand, so a command added to the dispatcher without being
+// listed here fails safe: it is hidden from the debug log, not leaked.
+var verbatimCommands = map[string]bool{
+	"USER": true, "QUIT": true, "STAT": true, "LIST": true, "RETR": true,
+	"DELE": true, "NOOP": true, "RSET": true, "TOP": true, "UIDL": true,
+	"CAPA": true, "STLS": true,
+}
+
+// unknownCommandMarker is the whole log rendering of a line whose keyword is not
+// a known command.
+const unknownCommandMarker = "<unknown command redacted>"
+
+// redactCommand returns a log-safe rendering of a raw client command line. The
+// diagnostic redaction policy is:
 //
-// This is the redaction boundary for issue #10: the per-command debug log used
-// to record the full raw line, writing "PASS <password>" in cleartext.
+//   - A credential-bearing verb (see credentialCommands) keeps its keyword and
+//     has its entire argument replaced with "<redacted>", so no password, APOP
+//     digest or SASL response reaches the logs. With no argument the line is
+//     logged as sent.
+//   - A known verb whose argument is not secret (see verbatimCommands) is logged
+//     verbatim, so ordinary sessions stay debuggable.
+//   - Every other line is replaced in full with unknownCommandMarker: nothing of
+//     it, not even its length, is logged.
+//
+// The last rule exists because an unknown line is exactly where a credential
+// ends up when a client gets the syntax wrong. Keywords fold ASCII case only, so
+// " PASS x", "PASS\tx", "paſs x" (U+017F) and "PАSS x" (Cyrillic А) are all
+// rejected as unknown commands, as are a password typed on a line by itself and
+// a SASL response sent after an AUTH the server does not offer. Any of them may
+// carry a secret, and the classifier cannot tell which, so none is logged. The
+// classification only decides what is logged; it never changes which commands
+// the session accepts.
+//
+// This is the redaction boundary for issue #10, which found the per-command debug
+// log recording "PASS <password>" in cleartext.
 func redactCommand(line string) string {
 	cmd, arg := parseCommand(line)
-	if arg != "" && credentialCommands[cmd] {
+	switch {
+	case credentialCommands[cmd]:
+		if arg == "" {
+			return line
+		}
 		return cmd + " <redacted>"
+	case verbatimCommands[cmd]:
+		return line
+	default:
+		return unknownCommandMarker
 	}
-	return line
 }
 
 // canonicalCRLF rewrites a stored message's line endings to canonical CRLF for
