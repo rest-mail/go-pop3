@@ -4,14 +4,30 @@ import "strings"
 
 // parseCommand splits a POP3 command line into command and argument. The command
 // is upper-cased; the argument is the remainder of the line, if any.
+//
+// RFC 1939 §3 keywords are printable ASCII and case-insensitive, so only a-z are
+// upper-cased and every other byte is kept as sent. strings.ToUpper would apply
+// Unicode case mapping instead: "paſs" (U+017F) and "lıst" (U+0131) would be
+// dispatched as PASS and LIST, and invalid UTF-8 would be rewritten to U+FFFD.
 func parseCommand(line string) (string, string) {
 	parts := strings.SplitN(line, " ", 2)
-	cmd := strings.ToUpper(parts[0])
+	cmd := upperASCII(parts[0])
 	arg := ""
 	if len(parts) > 1 {
 		arg = parts[1]
 	}
 	return cmd, arg
+}
+
+// upperASCII upper-cases the ASCII letters of s and leaves every other byte alone.
+func upperASCII(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'a' <= c && c <= 'z' {
+			b[i] = c - ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 // credentialCommands are POP3 verbs whose arguments carry secret material that
@@ -119,4 +135,36 @@ func splitMessageLines(block string) []string {
 		lines = lines[:n-1]
 	}
 	return lines
+}
+
+// dotStuff applies RFC 1939 §3 byte-stuffing to one line of a multi-line
+// response: a line beginning with the termination octet "." gets one more "."
+// prepended, so no content line can be read as the "." terminator. The client
+// removes exactly one leading "." from any line that begins with one.
+func dotStuff(line string) string {
+	if strings.HasPrefix(line, ".") {
+		return "." + line
+	}
+	return line
+}
+
+// topLines returns the lines TOP sends for a canonical CRLF message (RFC 1939
+// §7): the header lines, the empty line separating them from the body, and at
+// most n (n >= 0) body lines. The header section ends at the first empty line
+// (RFC 5322 §2.1): a message with no empty line is all header, and a message
+// that begins with an empty line has no header fields, so none of its body is
+// sent as header.
+func topLines(raw string, n int) []string {
+	header, body := raw, ""
+	if strings.HasPrefix(raw, "\r\n") {
+		header, body = "", raw[2:]
+	} else if i := strings.Index(raw, "\r\n\r\n"); i >= 0 {
+		header, body = raw[:i], raw[i+4:]
+	}
+	lines := append(splitMessageLines(header), "")
+	bodyLines := splitMessageLines(body)
+	if n > len(bodyLines) {
+		n = len(bodyLines)
+	}
+	return append(lines, bodyLines[:n]...)
 }

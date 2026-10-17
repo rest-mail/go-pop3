@@ -1,6 +1,9 @@
 package pop3
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // ── parseCommand ─────────────────────────────────────────────────────
 
@@ -117,5 +120,30 @@ func TestCanonicalCRLF(t *testing.T) {
 				t.Errorf("canonicalCRLF(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// RFC 1939 §3 keywords are ASCII, so only ASCII case is folded. Unicode case
+// mapping would turn U+017F (ſ) into S and U+0131 (ı) into I, dispatching a
+// non-ASCII keyword as a real command, and would rewrite invalid UTF-8.
+func TestParseCommand_KeywordCaseIsASCIIOnly(t *testing.T) {
+	cases := []struct {
+		line, cmd, arg string
+	}{
+		{"pass Secret", "PASS", "Secret"},
+		{"aPoP mrose c4c9334bac560ecc979e58001b3e22fb", "APOP", "mrose c4c9334bac560ecc979e58001b3e22fb"},
+		{"auth PLAIN dGVzdAB0ZXN0AHRlc3Q=", "AUTH", "PLAIN dGVzdAB0ZXN0AHRlc3Q="},
+		{"paſs secret", "PAſS", "secret"},
+		{"lıst 1", "LıST", "1"},
+		{"quıt", "QUıT", ""},
+		{"\xffpass x", "\xffPASS", "x"},
+		{"PASS\x80 x", "PASS\x80", "x"},
+		{strings.Repeat("0", 57) + "ı", strings.Repeat("0", 57) + "ı", ""}, // fuzz corpus cdbf828f0b681216
+	}
+	for _, tc := range cases {
+		cmd, arg := parseCommand(tc.line)
+		if cmd != tc.cmd || arg != tc.arg {
+			t.Errorf("parseCommand(%q) = (%q, %q), want (%q, %q)", tc.line, cmd, arg, tc.cmd, tc.arg)
+		}
 	}
 }

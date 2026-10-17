@@ -309,3 +309,33 @@ func TestPOP3_AuthFailureRejected(t *testing.T) {
 		t.Errorf("STAT while unauthenticated = %q, want -ERR", got)
 	}
 }
+
+// A keyword with a Unicode look-alike letter is not a POP3 command (RFC 1939
+// §3 keywords are ASCII): "paſs" must not log in and "quıt" must not end the
+// session.
+func TestPOP3_UnicodeLookalikeKeywordsRejected(t *testing.T) {
+	m := newMockBackend()
+	seedThree(m)
+	h := newPOP3Harness(t, m)
+
+	if got := h.cmd("USER %s", m.user); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("USER = %q", got)
+	}
+	if got := h.cmd("paſs %s", m.pass); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("paſs with the right password = %q, want -ERR", got)
+	}
+	if got := h.cmd("STAT"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("STAT after paſs = %q, want -ERR (not logged in)", got)
+	}
+	if got := h.cmd("PASS %s", m.pass); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("PASS = %q", got)
+	}
+	for _, line := range []string{"lıst", "quıt", "\xffSTAT"} {
+		if got := h.cmd("%s", line); !strings.HasPrefix(got, "-ERR") {
+			t.Errorf("%q = %q, want -ERR", line, got)
+		}
+	}
+	if got := h.cmd("LIST 1"); !strings.HasPrefix(got, "+OK") {
+		t.Errorf("LIST 1 after the look-alikes = %q, want +OK", got)
+	}
+}

@@ -544,32 +544,12 @@ func (s *Session) handleTop(arg string) {
 	// boundary from the header/body split or the per-line dot-stuffing below.
 	raw := canonicalCRLF(string(rawBytes))
 
-	// Split into headers and body
-	headerEnd := strings.Index(raw, "\r\n\r\n")
-	if headerEnd == -1 {
-		headerEnd = len(raw)
-	}
-
 	s.ok("")
-	// Send headers. splitMessageLines drops the trailing "" that strings.Split
-	// leaves when the header block ends in CRLF (a headers-only message), so no
-	// phantom header line is emitted (RFC 1939 §7).
-	for _, line := range splitMessageLines(raw[:headerEnd]) {
+	// topLines splits headers from body at the first empty line, emits the blank
+	// separator, and caps the body at the requested count. Its lines come from
+	// splitMessageLines, so no phantom or trailing blank line is emitted (§7).
+	for _, line := range topLines(raw, lines) {
 		s.sendStuffed(line)
-	}
-	s.sendLine("") // blank line separating headers from body
-
-	// Send requested number of body lines. splitMessageLines drops the trailing
-	// "" from the body's final CRLF so it is never counted or emitted as an extra
-	// blank line when the requested count meets or exceeds the body length.
-	if headerEnd+4 <= len(raw) {
-		bodyLines := splitMessageLines(raw[headerEnd+4:]) // skip \r\n\r\n
-		if lines > len(bodyLines) {
-			lines = len(bodyLines)
-		}
-		for i := 0; i < lines; i++ {
-			s.sendStuffed(bodyLines[i])
-		}
 	}
 	s.sendLine(".")
 }
@@ -691,9 +671,5 @@ func (s *Session) write(line string) {
 // (RFC 1939): a line beginning with "." gets an extra leading "." so it is not
 // mistaken for the "." terminator.
 func (s *Session) sendStuffed(line string) {
-	if strings.HasPrefix(line, ".") {
-		s.sendLine(".%s", line)
-	} else {
-		s.sendLine("%s", line)
-	}
+	s.sendLine("%s", dotStuff(line))
 }

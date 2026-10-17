@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **`TOP` of a message with an empty header section.** A message that begins with
+  an empty line has no header fields (RFC 5322 §2.1), but `TOP` treated its whole
+  body as header lines: `TOP n 0` sent every body line plus a stray blank line.
+  `TOP` now ends the header section at the first empty line, so it sends that
+  line and then at most the requested number of body lines (RFC 1939 §7).
+- **Command keywords fold ASCII case only.** RFC 1939 §3 keywords are printable
+  ASCII, but the parser upper-cased them with Unicode case mapping: `paſs`
+  (U+017F) logged in as `PASS`, `lıst` (U+0131) ran `LIST`, and invalid UTF-8 in a
+  keyword became U+FFFD. Only `a`-`z` are upper-cased now, so such a keyword is an
+  unknown command.
+
+### Added
+
+- **Fuzz tests** for the parsers that read untrusted input: the command line and
+  its log redaction, the UIDL unique-id, `canonicalCRLF`, `OctetCount`, and the
+  `RETR`/`TOP` framing. Each checks an RFC 1939 property against an independent
+  model, and CI fuzzes every target for 5 seconds (part of rest-mail-server#374).
+
 ## [0.2.0] - 2026-07-25
 
 ### Breaking
