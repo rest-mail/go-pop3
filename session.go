@@ -638,8 +638,9 @@ func (s *Session) handleQuit() {
 // trailing token makes the command line a syntax error that must be answered
 // -ERR rather than silently ignored (issue #14). When arg is non-empty this
 // writes the -ERR reply and returns true; the caller then skips the handler and
-// leaves session state untouched. An empty arg returns false so the handler
-// runs normally. Only a non-whitespace token counts as an argument, so a stray
+// preserves transaction state. Dispatch still invalidates pending USER.
+// An empty arg returns false so the handler runs normally. Only a
+// non-whitespace token counts as an argument, so a stray
 // trailing space is tolerated rather than treated as a syntax error.
 func (s *Session) rejectArg(arg string) bool {
 	if strings.TrimSpace(arg) != "" {

@@ -300,9 +300,16 @@ The exact current PARTIAL inventory is **70 mapped rows / 46 named wire tests**
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
 its row mapping. UIDL-session controls additionally remove each new test, row
-and annotation, and empty each new row mapping; every mutation must fail. Immediate-PASS controls also remove its test, row and annotation and empty its
+and annotation, and empty each new row mapping; every mutation must fail.
+Immediate-PASS controls also remove its test, row and annotation and empty its
 row mapping; every mutation must fail. Generic checker source/tests remain
 pinned and unchanged.
+
+Immediate-PASS regression validation replaces only `session.go` with baseline
+`fe05ed851f2765eb26af5568248892fd2d28fddc`: all 16 sequential/pipelined cases
+fail because stale PASS authenticates. Restoring the implementation makes all
+16 pass. The checker CLI validates the 70/46 inventory, and the generic and
+scoped mutation tests reject broken mappings.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the remaining AUTHORIZATION inventory (including full USER command
