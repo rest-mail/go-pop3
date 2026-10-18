@@ -327,6 +327,10 @@ func TestPOP3_UnicodeLookalikeKeywordsRejected(t *testing.T) {
 	if got := h.cmd("STAT"); !strings.HasPrefix(got, "-ERR") {
 		t.Fatalf("STAT after paſs = %q, want -ERR (not logged in)", got)
 	}
+	// The look-alike and STAT invalidate pending USER. Start a fresh exchange.
+	if got := h.cmd("USER %s", m.user); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("fresh USER = %q", got)
+	}
 	if got := h.cmd("PASS %s", m.pass); !strings.HasPrefix(got, "+OK") {
 		t.Fatalf("PASS = %q", got)
 	}

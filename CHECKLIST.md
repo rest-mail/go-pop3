@@ -29,6 +29,7 @@ Requirements below paraphrase the primary texts:
 | POP3-PASS-03 | RFC 1939 §§4, 7 (USER/PASS) | Normative | Invalid credentials receive a negative reply; permit a new authentication attempt if connected. | TestAuthenticationFailureRetry |
 | POP3-AUTH-03 | RFC 1939 §4 | Normative | Maildrop opening failure receives a negative reply and grants no transaction access. | TestMaildropOpenFailure |
 | POP3-PASS-04 | RFC 1939 §7 (PASS) | MAY | Treat embedded password spaces as password data. | TestPasswordContainsSpaces |
+| POP3-PASS-05 | RFC 1939 §7 (PASS), Appendix A | Normative | Accept PASS only immediately after a successful USER in AUTHORIZATION; intervening commands and empty PASS invalidate pending USER without backend calls, and a fresh USER/PASS pair can retry. | TestPassRequiresImmediateUser |
 | POP3-AUTH-04 | RFC 1939 §§3–4, 7 (USER) | Normative | QUIT in AUTHORIZATION replies positively and closes, including after accepted USER. | TestAuthorizationQuit |
 
 ## RFC 2449: selected CAPA behavior without TLS
@@ -265,6 +266,22 @@ persistence, locking, APOP, socket listener or complete RFC coverage is claimed.
 |----|---------|-------|-------------|-------|
 | POP3-EXAMPLE-01 | RFC 1939 §10 (adapted transaction example); §§3, 5–6, 11 | Normative | Exercise the published 120/200-octet transaction sequence with adapted setup and synthetic bodies: exact STAT/LIST numbers, complete RETR framing, deferred DELE, stable remaining number and successful per-UID QUIT removal/EOF. | TestRFC1939AdaptedTransactionExample |
 
+## RFC 1939 §7: immediate PASS sequencing
+
+`TestPassRequiresImmediateUser` exercises sequential and bounded pipelined
+USER, intervening command, PASS sequences through the public Session. CAPA is
+still allowed and its exact multiline reply is drained; unknown commands,
+pre-auth STAT, malformed USER, empty PASS, a malformed PASS keyword, rejected
+CAPA arguments and unavailable STLS all require a fresh USER before PASS.
+Every stale PASS receives -ERR without Authenticate, Messages, Retrieve,
+MarkSeen or Delete calls. A fresh immediate USER/PASS pair then succeeds with
+exactly one Authenticate and one Messages call, followed by QUIT/EOF and joined
+Handle. The existing immediate login and authentication-pipeline proofs remain.
+This proves selected invalidation paths, not the full USER-allowed sequence,
+APOP/SASL, mailbox locking or transport-window behavior. Blank lines retain the
+existing ignored-line policy; password spaces remain password data. Exact error
+prose is library behavior, not an RFC requirement.
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -277,17 +294,18 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **69 mapped rows / 45 named wire tests**
-(previous 67/43 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **70 mapped rows / 46 named wire tests**
+(previous 69/45 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
 its row mapping. UIDL-session controls additionally remove each new test, row
-and annotation, and empty each new row mapping; every mutation must fail. Generic checker
-source/tests remain pinned and unchanged.
+and annotation, and empty each new row mapping; every mutation must fail. Immediate-PASS controls also remove its test, row and annotation and empty its
+row mapping; every mutation must fail. Generic checker source/tests remain
+pinned and unchanged.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
-include the complete AUTHORIZATION inventory (notably strict immediate-PASS
+include the remaining AUTHORIZATION inventory (including full USER command
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
 contracts, remaining TOP/UIDL vectors and production cross-session UID persistence,
 crash recovery and maildrop lifetime/global UID generation/non-reuse,
