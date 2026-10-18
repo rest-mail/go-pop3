@@ -229,6 +229,31 @@ argument/state and queued unknown-command proofs remain in their sections above.
 | POP3-COMMAND-02 | RFC 1939 §3 | MUST | Reply to currently unimplemented optional APOP/AUTH commands with uppercase -ERR and CRLF in AUTHORIZATION and TRANSACTION. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
 | POP3-COMMAND-POLICY-01 | Library policy (session.go default dispatch) | Normative | Refusal keeps the session usable without authentication or backend read/delete side effects, preserving existing deletion marks until explicit RSET or QUIT. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
 
+## RFC 1939 §10: ADAPTED TRANSACTION example
+
+This is an **ADAPTED TRANSACTION** example of the published two-message,
+120/200-octet sequence, not a literal full RFC session or an APOP proof. Section 10
+uses APOP, which this library does not implement, and supplies no message bodies.
+The test instead authenticates with existing USER/PASS (`alice`/`secret`), then
+runs STAT, LIST, RETR 1, DELE 1, RETR 2, DELE 2 and QUIT in one public
+Session/net.Pipe connection. The added STAT/LIST after DELE 1 is a visibility and
+stable-numbering control, not a command sequence claimed from section 10.
+
+Synthetic messages have Date/From/Subject headers, canonical CRLF, and independently
+asserted byte lengths of exactly 120 and 200; backend metadata is separately fixed
+to those sizes. Bodies include `.`, `..`, `.x`, a leading-dot word and a blank
+line. Entire RETR bytes are checked against explicitly stuffed expectations,
+including every CRLF and the final dot terminator. Backend handles are
+`example-alpha`/`example-bravo`, distinct from wire numbers. Both messages stay in
+memory through DELE and are removed exactly once per UID only at QUIT; EOF and
+session-goroutine completion are checked. Exact explanatory reply text records
+current library output, not additional normative RFC prose. No real backend
+persistence, locking, APOP, socket listener or complete RFC coverage is claimed.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-EXAMPLE-01 | RFC 1939 §10 (adapted transaction example); §§3, 5–6, 11 | Normative | Exercise the published 120/200-octet transaction sequence with adapted setup and synthetic bodies: exact STAT/LIST numbers, complete RETR framing, deferred DELE, stable remaining number and successful per-UID QUIT removal/EOF. | TestRFC1939AdaptedTransactionExample |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -241,6 +266,12 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
+The exact current PARTIAL inventory is **67 mapped rows / 43 named wire tests**
+(previous 66/42 preserved). Example negative-control inputs replace
+`TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
+or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
+exit nonzero. The scoped mutation test also removes its annotation and empties
+its row mapping. Generic checker source/tests remain pinned and unchanged.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
