@@ -26,6 +26,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	optional := read("internal/rfctest/optional_test.go")
 	stls := read("internal/rfctest/stls_test.go")
 	pipelining := read("internal/rfctest/pipelining_test.go")
+	responseCodes := read("internal/rfctest/response_codes_test.go")
 	for _, tc := range []struct{ name, checklist, tests, want string }{
 		{"valid", checklist, tests, ""},
 		{"missing-annotation", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// mapping removed", 1), "TestAuthenticationFailureRetry does not name POP3-PASS-03"},
@@ -39,12 +40,13 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			file := filepath.Join(dir, "CHECKLIST.md")
 			for path, content := range map[string]string{
 				file: tc.checklist,
-				filepath.Join(dir, "authorization_test.go"): tc.tests,
-				filepath.Join(dir, "transaction_test.go"):   transaction,
-				filepath.Join(dir, "update_test.go"):        update,
-				filepath.Join(dir, "optional_test.go"):      optional,
-				filepath.Join(dir, "stls_test.go"):          stls,
-				filepath.Join(dir, "pipelining_test.go"):    pipelining,
+				filepath.Join(dir, "authorization_test.go"):  tc.tests,
+				filepath.Join(dir, "transaction_test.go"):    transaction,
+				filepath.Join(dir, "update_test.go"):         update,
+				filepath.Join(dir, "optional_test.go"):       optional,
+				filepath.Join(dir, "stls_test.go"):           stls,
+				filepath.Join(dir, "pipelining_test.go"):     pipelining,
+				filepath.Join(dir, "response_codes_test.go"): responseCodes,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)

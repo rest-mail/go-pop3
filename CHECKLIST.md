@@ -3,15 +3,17 @@
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
 USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
 behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
-behavior in TRANSACTION. It is not an inventory of all applicable
+behavior in TRANSACTION, plus selected RFC 2449 RESP-CODES and RFC 3206 AUTH
+response-code behavior. It is not an inventory of all applicable
 RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
 
 Requirements below paraphrase the primary texts:
 [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt),
-[RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt), and
-[RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt).
+[RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt),
+[RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt), and
+[RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
@@ -146,6 +148,30 @@ requires the relevant status and ordering, not those particular words.
 | POP3-PIPELINING-04 | RFC 2449 §6.6; RFC 1939 §3 | MUST | Reply negatively to invalid and unknown queued commands in order; subsequent valid commands retain their replies and session access. | TestPipeliningErrorRecovery |
 | POP3-PIPELINING-05 | RFC 2449 §6.6; RFC 1939 §5 | MUST | Process queued DELE, queries and RSET in turn; repeated batches observe deletion then restoration with stable message numbers and UIDs. | TestPipeliningStateOrder |
 
+## RFC 2449 §§3, 6.4, 8 and RFC 3206 §5: selected RESP-CODES/AUTH behavior
+
+RFC 2449 §8 permits optional bracketed response codes; advertising RESP-CODES
+does not require a code on every -ERR. RFC 3206 §5 defines AUTH for credential
+problems, including wrong passwords and unknown accounts. These public
+Session/net.Pipe tests pin that code and its wire placement, not merely error
+prose. The exact uppercase spelling, explanatory text and spacing after the
+closing bracket record current library output, not additional RFC mandates.
+The POLICY rows are library regression contracts, represented as `Normative`
+for the checker's existing vocabulary; they are not RFC MUST/SHOULD claims.
+They pin identical public credential-failure replies, a fresh USER after a
+failed PASS, and plain maildrop-load errors without credential AUTH labeling or
+backend detail disclosure. Fixtures use memory, nil TLS and the default no-op
+limiter; backend Authenticate errors are treated as credential rejection here,
+not a proof that the interface classifies arbitrary backend failures correctly.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-RESP-CODES-01 | RFC 2449 §§6.4, 8 | Normative | Announce parameterless RESP-CODES in AUTHORIZATION and TRANSACTION for extended response-code support. | TestResponseCodeCapabilities |
+| POP3-RESP-CODES-02 | RFC 2449 §§3, 8; RFC 3206 §5 | Normative | On coded wrong-password and unknown-account PASS failures, AUTH denotes credential trouble and begins response text in brackets after the status space, with CRLF framing. | TestResponseCodeCredentialFailures |
+| POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
+| POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
+| POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with plain -ERR without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -165,7 +191,10 @@ sequencing and mailbox locking/backend contracts), remaining UPDATE integration
 contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including AUTHORIZATION/TLS and transport-window
-handling), RESP-CODES semantics, other extension requirements and CAPA configuration variations,
+handling), remaining RESP-CODES semantics (including hierarchical/unknown-code
+client handling, LOGIN-DELAY, IN-USE and SYS), RFC 3206 §§5–6's SHOULD to
+advertise AUTH-RESP-CODE (currently absent) and its full credential-error
+contract, other extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
 adoption of the shared reusable workflow. Keep library/root coverage separate
