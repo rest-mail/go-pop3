@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -251,6 +252,58 @@ func TestIdleTimeoutWithBufferedPartialCommand(t *testing.T) {
 			got, err := m.Messages()
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("messages after timeout = %v (%v), want %v", got, err, want)
+			}
+		})
+	}
+}
+
+// authCountingBackend records every backend entry point. Authenticate is the
+// only way into a mailbox, so a zero count also means no mailbox operation.
+type authCountingBackend struct{ authenticated atomic.Int32 }
+
+func (b *authCountingBackend) Authenticate(string, string) (pop3.Mailbox, error) {
+	b.authenticated.Add(1)
+	return nil, errors.New("unexpected authentication")
+}
+
+// checklist: POP3-IDLE-05
+func TestIdlePreLoginTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sent []string // complete commands answered before the timeout
+	}{
+		{"after-greeting", nil},
+		{"after-user-before-pass", []string{"USER alice"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &authCountingBackend{}
+			w := idleConnect(t, b)
+			w.awaitRead() // The greeting's idle interval.
+			for _, command := range tc.sent {
+				w.exchange(command, "+OK")
+			}
+			// The session is blocked in Read in AUTHORIZATION and no PASS was
+			// sent. Moving the underlying read deadline into the past stands
+			// in for ten idle minutes with a genuine net.Pipe timeout.
+			if err := w.pipe.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			// No response is sent: the client sees only the connection closing.
+			_ = w.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if b, err := w.reader.ReadByte(); !errors.Is(err, io.EOF) {
+				t.Fatalf("after timeout: byte %q, err %v, want EOF without a response", b, err)
+			}
+			waitStopped(t, w.wire)
+			w.server.mu.Lock()
+			readErr := w.server.readErr
+			w.server.mu.Unlock()
+			var netErr net.Error
+			if !errors.Is(readErr, os.ErrDeadlineExceeded) || !errors.As(readErr, &netErr) || !netErr.Timeout() {
+				t.Fatalf("session read ended with %v, want a deadline timeout", readErr)
+			}
+			// Authenticate is the only route to a mailbox: never called.
+			if n := b.authenticated.Load(); n != 0 {
+				t.Fatalf("backend Authenticate called %d times, want 0", n)
 			}
 		})
 	}

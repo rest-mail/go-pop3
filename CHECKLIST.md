@@ -259,8 +259,9 @@ into the past once the session waits under its renewed deadline after DELE; the
 session then sees a genuine `os.ErrDeadlineExceeded` timeout, not EOF. The
 ten-minute duration is thus proved from the configured deadline, not from
 elapsed wall-clock time. Fixtures use memory, nil TLS and the no-op limiter.
-Expiry after STLS or in AUTHORIZATION, and real
-socket keepalive behavior, are outside this selected inventory.
+Expiry in AUTHORIZATION is proved only for the greeting-idle and pending-USER states
+(POP3-IDLE-05); expiry after STLS, mid-PASS, with a buffered partial pre-login
+command, and real socket keepalive behavior, are outside this selected inventory.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -268,6 +269,7 @@ socket keepalive behavior, are outside this selected inventory.
 | POP3-IDLE-02 | RFC 1939 §3 | Normative | Receipt of any command resets the timer: valid and invalid commands in AUTHORIZATION and TRANSACTION each renew the deadline from that command, once, before the next read. | TestIdleDeadlineReset |
 | POP3-IDLE-03 | RFC 1939 §3 | Normative | On expiry the session does not enter UPDATE: a real read timeout after two DELE marks closes the connection with no response, no backend Delete and unchanged messages. | TestIdleAutologoutWithoutUpdate |
 | POP3-IDLE-04 | RFC 1939 §3, §6 | Normative | A real read timeout while an incomplete command (`QUIT` or `QUIT\r`, no LF) is buffered closes without a response, never dispatches the partial command, does not enter UPDATE and makes no backend Delete after two DELE marks. | TestIdleTimeoutWithBufferedPartialCommand |
+| POP3-IDLE-05 | RFC 1939 §3 | Normative | A real read timeout in AUTHORIZATION, both immediately after the greeting and after an accepted USER with no PASS sent, closes without a response and never reaches backend Authenticate (so no mailbox operation). | TestIdlePreLoginTimeout |
 
 ## RFC 1939 §10: ADAPTED TRANSACTION example
 
@@ -322,8 +324,8 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **74 mapped rows / 49 named wire tests**
-(previous 73/48 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **75 mapped rows / 50 named wire tests**
+(previous 74/49 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
@@ -331,13 +333,13 @@ its row mapping. UIDL-session controls additionally remove each new test, row
 and annotation, and empty each new row mapping; every mutation must fail.
 Immediate-PASS controls also remove its test, row and annotation and empty its
 row mapping; every mutation must fail. Autologout controls do the same for
-POP3-IDLE-01, POP3-IDLE-03 and POP3-IDLE-04. Generic checker source/tests remain
+POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04 and POP3-IDLE-05. Generic checker source/tests remain
 pinned and unchanged.
 
 Immediate-PASS regression validation replaces only `session.go` with baseline
 `fe05ed851f2765eb26af5568248892fd2d28fddc`: all 16 sequential/pipelined cases
 fail because stale PASS authenticates. Restoring the implementation makes all
-16 pass. The checker CLI validates the 74/49 inventory, and the generic and
+16 pass. The checker CLI validates the 75/50 inventory, and the generic and
 scoped mutation tests reject broken mappings.
 
 Autologout validation temporarily edits only `session.go`, restoring it
@@ -360,11 +362,26 @@ read error: the partial QUIT is dispatched, UPDATE runs and the test fails;
 forced, not a real ten-minute wait; only QUIT variants are covered, not other
 partial commands; STLS and pre-login partial commands remain untested.
 
+The pre-login proof (POP3-IDLE-05) uses the same harness with a counting backend.
+Greeting-idle and pending-USER states are each reached by the next-Read signal
+(no sleeps; no PASS is ever sent). The underlying read deadline is then moved into
+the past: the session must end its Read with `os.ErrDeadlineExceeded`
+(`net.Error.Timeout()` true), the client sees EOF with no response byte, `Handle`
+returns, and backend Authenticate (the only route to a mailbox) was called zero
+times. A complete USER before the timeout is independent of the partial-QUIT
+cases. Temporary controls on `session.go` (restored byte-for-byte, SHA-256
+checked, no runtime file committed): writing `-ERR` on a read error fails both
+cases on the unexpected response byte; calling `backend.Authenticate` on a read
+error fails both on the Authenticate count. Limits: the timeout is forced, not a
+real ten-minute wait; plaintext only, with no TLS/STLS claim (expiry after STLS
+remains untested); a timeout mid-PASS and with a buffered partial pre-login
+command remain untested.
+
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the remaining AUTHORIZATION inventory (including full USER command
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, remaining RFC 1939 §3 autologout cases (expiry after STLS or in
-AUTHORIZATION), remaining TOP/UIDL vectors and production cross-session UID persistence,
+contracts, remaining RFC 1939 §3 autologout cases (expiry after STLS, and
+partial pre-login commands), remaining TOP/UIDL vectors and production cross-session UID persistence,
 crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
