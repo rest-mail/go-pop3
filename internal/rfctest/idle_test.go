@@ -199,3 +199,59 @@ func TestIdleAutologoutWithoutUpdate(t *testing.T) {
 		t.Fatalf("messages after autologout = %v (%v), want %v", got, err, want)
 	}
 }
+
+// checklist: POP3-IDLE-04
+func TestIdleTimeoutWithBufferedPartialCommand(t *testing.T) {
+	for _, tc := range []struct{ name, partial string }{
+		{"quit-without-terminator", "QUIT"},
+		{"quit-with-cr-without-lf", "QUIT\r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &updateMailbox{
+				transactionMailbox: transactionMailbox{raw: transactionMessages},
+				attempts:           map[string]int{}, removed: map[string]bool{},
+			}
+			want, err := m.Messages()
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := idleConnect(t, m)
+			w.awaitRead()
+			w.exchange("USER alice", "+OK")
+			w.exchange("PASS secret", "+OK")
+			w.exchange("DELE 1", "+OK")
+			w.exchange("DELE 3", "+OK")
+			// The session is now blocked in Read, and its signal was consumed.
+			// net.Pipe writes complete only when the server's Read has taken the
+			// bytes, so the partial command is buffered once Write returns.
+			_ = w.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if n, err := io.WriteString(w.conn, tc.partial); err != nil || n != len(tc.partial) {
+				t.Fatalf("send partial command: %d bytes, %v", n, err)
+			}
+			// The next Read entry proves the incomplete line was buffered and
+			// the session is again waiting for its terminating LF.
+			w.awaitRead()
+			if err := w.pipe.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			_ = w.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if b, err := w.reader.ReadByte(); !errors.Is(err, io.EOF) {
+				t.Fatalf("after timeout: byte %q, err %v, want EOF without a response", b, err)
+			}
+			waitStopped(t, w.wire)
+			w.server.mu.Lock()
+			readErr := w.server.readErr
+			w.server.mu.Unlock()
+			var netErr net.Error
+			if !errors.Is(readErr, os.ErrDeadlineExceeded) || !errors.As(readErr, &netErr) || !netErr.Timeout() {
+				t.Fatalf("session read ended with %v, want a deadline timeout", readErr)
+			}
+			// The partial QUIT was never dispatched: no UPDATE, no Delete.
+			deletions(t, m, nil, nil)
+			got, err := m.Messages()
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("messages after timeout = %v (%v), want %v", got, err, want)
+			}
+		})
+	}
+}

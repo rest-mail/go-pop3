@@ -259,7 +259,7 @@ into the past once the session waits under its renewed deadline after DELE; the
 session then sees a genuine `os.ErrDeadlineExceeded` timeout, not EOF. The
 ten-minute duration is thus proved from the configured deadline, not from
 elapsed wall-clock time. Fixtures use memory, nil TLS and the no-op limiter.
-Expiry during a partial command, after STLS, or in AUTHORIZATION, and real
+Expiry after STLS or in AUTHORIZATION, and real
 socket keepalive behavior, are outside this selected inventory.
 
 | ID | Section | Level | Requirement | Tests |
@@ -267,6 +267,7 @@ socket keepalive behavior, are outside this selected inventory.
 | POP3-IDLE-01 | RFC 1939 §3 | MUST | The implemented autologout timer is at least ten minutes: every idle interval's read deadline falls at least ten minutes after the server's final reply write. | TestIdleDeadlineReset |
 | POP3-IDLE-02 | RFC 1939 §3 | Normative | Receipt of any command resets the timer: valid and invalid commands in AUTHORIZATION and TRANSACTION each renew the deadline from that command, once, before the next read. | TestIdleDeadlineReset |
 | POP3-IDLE-03 | RFC 1939 §3 | Normative | On expiry the session does not enter UPDATE: a real read timeout after two DELE marks closes the connection with no response, no backend Delete and unchanged messages. | TestIdleAutologoutWithoutUpdate |
+| POP3-IDLE-04 | RFC 1939 §3, §6 | Normative | A real read timeout while an incomplete command (`QUIT` or `QUIT\r`, no LF) is buffered closes without a response, never dispatches the partial command, does not enter UPDATE and makes no backend Delete after two DELE marks. | TestIdleTimeoutWithBufferedPartialCommand |
 
 ## RFC 1939 §10: ADAPTED TRANSACTION example
 
@@ -321,8 +322,8 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **73 mapped rows / 48 named wire tests**
-(previous 70/46 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **74 mapped rows / 49 named wire tests**
+(previous 73/48 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
@@ -330,13 +331,13 @@ its row mapping. UIDL-session controls additionally remove each new test, row
 and annotation, and empty each new row mapping; every mutation must fail.
 Immediate-PASS controls also remove its test, row and annotation and empty its
 row mapping; every mutation must fail. Autologout controls do the same for
-POP3-IDLE-01 and POP3-IDLE-03. Generic checker source/tests remain
+POP3-IDLE-01, POP3-IDLE-03 and POP3-IDLE-04. Generic checker source/tests remain
 pinned and unchanged.
 
 Immediate-PASS regression validation replaces only `session.go` with baseline
 `fe05ed851f2765eb26af5568248892fd2d28fddc`: all 16 sequential/pipelined cases
 fail because stale PASS authenticates. Restoring the implementation makes all
-16 pass. The checker CLI validates the 73/48 inventory, and the generic and
+16 pass. The checker CLI validates the 74/49 inventory, and the generic and
 scoped mutation tests reject broken mappings.
 
 Autologout validation temporarily edits only `session.go`, restoring it
@@ -346,11 +347,24 @@ fails on zero renewals; deleting marked messages after the read error fails on
 backend Delete calls; and an -ERR before closing fails on the unexpected
 response. Restored, both pass. This slice changes no runtime code.
 
+The partial-command proof (POP3-IDLE-04) runs the same harness with `QUIT` and
+`QUIT\r` (no LF) sent after two DELE marks. net.Pipe completes a Write only when
+the server's Read has taken the bytes, and the next Read entry signal proves the
+session is waiting for the missing LF, so the partial line is buffered with no
+sleep. The underlying read deadline is then moved into the past: the session must
+end its Read with `os.ErrDeadlineExceeded`, the client sees EOF with no response
+byte, the backend gets zero Delete calls and the messages are unchanged. Its
+temporary control makes `readCommandLine` return the buffered partial line on a
+read error: the partial QUIT is dispatched, UPDATE runs and the test fails;
+`session.go` was restored byte-for-byte (SHA-256 checked). Limits: the timeout is
+forced, not a real ten-minute wait; only QUIT variants are covered, not other
+partial commands; STLS and pre-login partial commands remain untested.
+
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the remaining AUTHORIZATION inventory (including full USER command
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, remaining RFC 1939 §3 autologout cases (expiry during a partial
-command, after STLS or in AUTHORIZATION), remaining TOP/UIDL vectors and production cross-session UID persistence,
+contracts, remaining RFC 1939 §3 autologout cases (expiry after STLS or in
+AUTHORIZATION), remaining TOP/UIDL vectors and production cross-session UID persistence,
 crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
