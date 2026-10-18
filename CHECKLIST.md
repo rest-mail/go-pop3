@@ -1,14 +1,16 @@
 # POP3 RFC checklist — PARTIAL checked foundation
 
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
-USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE and selected §7 TOP/UIDL behavior. It is not an inventory of
-all applicable RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
+USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
+behavior and RFC 2595 §4 STLS transitions. It is not an inventory of all applicable
+RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
 
 Requirements below paraphrase the primary texts:
-[RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt) and
-[RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt).
+[RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt),
+[RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt), and
+[RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
@@ -97,6 +99,29 @@ for identical message copies.
 | POP3-UIDL-03 | RFC 1939 §§4–5, 7 (UIDL) | Normative | Retain numbers and UIDs across repeated commands within a session; exclude deletion marks from lists and single replies; RSET restores the original listings. | TestOptionalDeleteReset |
 | POP3-UIDL-04 | RFC 1939 §7 (UIDL) | Normative | Emit UIDs of 1–70 printable ASCII characters (0x21–0x7e); reject malformed visible backend UIDs without corrupting subsequent response framing. | TestOptionalUIDLListing, TestOptionalUIDLInvalidBackend |
 
+## RFC 2595 §4: selected POP3 STLS and CAPA transitions
+
+POP3 STLS is specified in RFC 2595 **§4**; §3 specifies IMAP STARTTLS.
+These proofs use public Session/net.Pipe with an actual TLS 1.3 handshake,
+a temporary self-signed localhost certificate trusted by the client, normal
+certificate/hostname verification, bounded client deadlines and joined session
+goroutines. TLS 1.3 is the test fixture's choice, not a claimed RFC 2595 mandate.
+Re-issued encrypted CAPA verifies the transition, not client cache management.
+The two POLICY rows describe existing library choices: configuring TLS refuses
+plaintext USER/PASS, and a failed handshake closes the session. They are not
+universal RFC mandates. Nil TLS configuration permits plaintext authentication.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-STLS-01 | RFC 2595 §4; RFC 2449 §5 | Normative | Advertise parameterless STLS through CAPA when available before TLS; omit it and refuse STLS when TLS is not configured. | TestSTLSNoConfig, TestSTLSCredentials |
+| POP3-STLS-02 | RFC 2595 §4 | Normative | STLS takes no arguments; refuse extra arguments without starting TLS or losing the plaintext session. | TestSTLSArguments |
+| POP3-STLS-03 | RFC 2595 §4 | Normative | Start TLS immediately after the positive STLS reply's CRLF; subsequent POP3 commands use the negotiated TLS layer. | TestSTLSCredentials |
+| POP3-STLS-04 | RFC 2595 §4 | Normative | Remain in AUTHORIZATION after STLS; do not grant transaction access until USER/PASS succeeds. | TestSTLSCredentials |
+| POP3-STLS-05 | RFC 2595 §4; RFC 2449 §5 | Normative | Re-issued CAPA after TLS omits STLS and retains USER; preserve that encrypted capability list after authentication. | TestSTLSCredentials |
+| POP3-STLS-06 | RFC 2595 §4 | Normative | Permit STLS only in AUTHORIZATION; refuse it in TRANSACTION and exercise the permitted refusal when TLS is already active. | TestSTLSStates |
+| POP3-TLS-POLICY-01 | RFC 2595 §§2.5, 4 (library policy) | Normative | With TLS configured, refuse plaintext USER/PASS without calling backend authentication; accept valid credentials through TLS exactly once. | TestSTLSCredentials |
+| POP3-TLS-POLICY-02 | RFC 2595 §2.5 (library policy) | Normative | Close after a malformed TLS record header during STLS negotiation without calling backend authentication. | TestSTLSHandshakeFailure |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -114,7 +139,8 @@ Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/r
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
 contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
-TLS/STLS, remaining extension requirements and CAPA configuration variations,
+remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
+remaining extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
 adoption of the shared reusable workflow. Keep library/root coverage separate
