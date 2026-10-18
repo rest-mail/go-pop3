@@ -39,6 +39,7 @@ type wire struct {
 	t      *testing.T
 	conn   net.Conn
 	reader *bufio.Reader
+	done   <-chan struct{}
 }
 
 func connect(t *testing.T, b pop3.Backend) *wire {
@@ -54,7 +55,7 @@ func connect(t *testing.T, b pop3.Backend) *wire {
 			t.Error("session did not stop")
 		}
 	})
-	w := &wire{t: t, conn: client, reader: bufio.NewReader(client)}
+	w := &wire{t: t, conn: client, reader: bufio.NewReader(client), done: done}
 	w.status(w.line(), "+OK")
 	return w
 }
