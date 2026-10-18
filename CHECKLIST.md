@@ -1,8 +1,8 @@
 # POP3 RFC checklist — PARTIAL checked foundation
 
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
-USER/PASS and CAPA behavior. It is not an inventory of all applicable RFC
-requirements, a full conformance claim, or a coverage badge. A mapped row means
+USER/PASS, CAPA and RFC 1939 §5 TRANSACTION behavior. It is not an inventory of
+all applicable RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
 
@@ -34,6 +34,27 @@ Requirements below paraphrase the primary texts:
 | POP3-CAPA-03 | RFC 2449 §5 | MUST | Retain AUTHORIZATION capabilities in TRANSACTION (tested without TLS). | TestCapaBothStates |
 | POP3-CAPA-04 | RFC 2449 §6.2 | Normative | Announce parameterless USER in both states for USER/PASS support. | TestCapaBothStates |
 
+## RFC 1939 §5: selected TRANSACTION requirements
+
+Sizes here use a backend fixture with canonical CRLF messages and correct octet
+metadata; this does not certify arbitrary backend metadata or all message formats.
+Deletion references below cover LIST, RETR and DELE; optional TOP/UIDL are follow-ups.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-TRANS-01 | RFC 1939 §5 | Normative | Require TRANSACTION for STAT, LIST, RETR, DELE, NOOP and RSET. | TestTransactionArguments |
+| POP3-TRANS-02 | RFC 1939 §§3, 5 | Normative | Reject arguments to STAT/NOOP/RSET and missing or invalid required message numbers. | TestTransactionArguments |
+| POP3-STAT-01 | RFC 1939 §5 (STAT) | Normative | Reply positively with decimal message count and total octets separated by spaces. | TestTransactionStatList, TestTransactionEmptyMaildrop |
+| POP3-STAT-02 | RFC 1939 §5 (STAT) | Normative | Exclude deletion marks from count and size. | TestTransactionDeleteReset |
+| POP3-LIST-01 | RFC 1939 §§4–5 (LIST) | Normative | List each message using its stable one-based decimal number and exact octet size. | TestTransactionStatList, TestTransactionDeleteReset |
+| POP3-LIST-02 | RFC 1939 §§3, 5 (LIST) | Normative | Argumentless LIST sends positive status, scan lines and dot terminator; empty maildrops have no scan lines. | TestTransactionStatList, TestTransactionEmptyMaildrop |
+| POP3-LIST-03 | RFC 1939 §5 (LIST) | Normative | LIST with a valid number returns its scan listing; reject nonexistent or deleted messages and omit deleted scan lines. | TestTransactionStatList, TestTransactionArguments, TestTransactionDeleteReset |
+| POP3-RETR-01 | RFC 1939 §§3, 5 (RETR) | Normative | Positive RETR sends the selected entire message with CRLF framing, leading-dot stuffing and a dot terminator. | TestTransactionRetrieval |
+| POP3-RETR-02 | RFC 1939 §5 (RETR) | Normative | Reject nonexistent and deletion-marked message numbers. | TestTransactionArguments, TestTransactionDeleteReset |
+| POP3-DELE-01 | RFC 1939 §5 (DELE) | Normative | Mark a valid message positively; reject nonexistent and already marked messages; defer physical removal. | TestTransactionArguments, TestTransactionDeleteReset |
+| POP3-NOOP-01 | RFC 1939 §5 (NOOP) | Normative | Reply positively without altering message visibility or deletion marks. | TestTransactionNoop |
+| POP3-RSET-01 | RFC 1939 §5 (RSET) | Normative | Reply positively and clear all deletion marks, restoring listings, counts and retrieval. | TestTransactionDeleteReset |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -49,7 +70,7 @@ missing mappings, unknown IDs and duplicate IDs must fail.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
-sequencing and mailbox locking/backend contracts), TRANSACTION and UPDATE,
+sequencing and mailbox locking/backend contracts), UPDATE/QUIT, optional TOP/UIDL,
 TLS/STLS, remaining extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and

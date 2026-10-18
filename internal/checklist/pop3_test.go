@@ -21,6 +21,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	}
 	checklist := read("CHECKLIST.md")
 	tests := read("internal/rfctest/authorization_test.go")
+	transaction := read("internal/rfctest/transaction_test.go")
 	for _, tc := range []struct{ name, checklist, tests, want string }{
 		{"valid", checklist, tests, ""},
 		{"missing-annotation", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// mapping removed", 1), "TestAuthenticationFailureRetry does not name POP3-PASS-03"},
@@ -32,7 +33,11 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			file := filepath.Join(dir, "CHECKLIST.md")
-			for path, content := range map[string]string{file: tc.checklist, filepath.Join(dir, "authorization_test.go"): tc.tests} {
+			for path, content := range map[string]string{
+				file: tc.checklist,
+				filepath.Join(dir, "authorization_test.go"): tc.tests,
+				filepath.Join(dir, "transaction_test.go"):   transaction,
+			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
 				}
