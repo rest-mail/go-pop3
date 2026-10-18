@@ -1,7 +1,7 @@
 # POP3 RFC checklist — PARTIAL checked foundation
 
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
-USER/PASS, CAPA and RFC 1939 §§5–6 TRANSACTION/UPDATE behavior. It is not an inventory of
+USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE and selected §7 TOP/UIDL behavior. It is not an inventory of
 all applicable RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -38,7 +38,7 @@ Requirements below paraphrase the primary texts:
 
 Sizes here use a backend fixture with canonical CRLF messages and correct octet
 metadata; this does not certify arbitrary backend metadata or all message formats.
-Deletion references below cover LIST, RETR and DELE; optional TOP/UIDL are follow-ups.
+Deletion references below cover LIST, RETR and DELE; selected TOP/UIDL proofs follow in §7.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -75,6 +75,28 @@ AUTHORIZATION QUIT remains covered by POP3-AUTH-04 above.
 | POP3-UPDATE-05 | RFC 1939 §6 | MUST NOT | Remove messages when a session ends without client-issued QUIT (tested with EOF and an incomplete command). | TestUpdateDisconnect |
 | POP3-UPDATE-06 | RFC 1939 §6 | Normative | Report removal failure negatively; some or none of the marked messages may have been removed. | TestUpdateDeleteFailure |
 
+## RFC 1939 §7: selected optional TOP/UIDL requirements
+
+These tests reuse the canonical message corpus and public Session/net.Pipe
+helpers with opaque backend UIDs distinct from wire message numbers. UID stability
+here means repeated commands within one session, including DELE/RSET; persistence
+across sessions, non-reuse over a maildrop's lifetime and backend durability remain
+unproved integration follow-ups. Format checks exercise existing fail-safe error
+handling, not new runtime work. The duplicate-ID negative case records the
+library's current rejection policy, not a claim that the RFC forbids equal hashes
+for identical message copies.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-TOP-01 | RFC 1939 §§3, 7 (TOP) | Normative | Require TRANSACTION, a valid message number and a non-negative line count; reject missing, invalid or extra arguments. | TestOptionalArguments |
+| POP3-TOP-02 | RFC 1939 §7 (TOP) | Normative | TOP with zero body lines sends headers and one blank separator, with no body lines (including empty-header and headers-only fixtures). | TestOptionalTopFraming |
+| POP3-TOP-03 | RFC 1939 §§3, 7 (TOP) | Normative | Send at most the requested body lines, clamping to the available body; use CRLF, leading-dot stuffing and exactly one dot terminator. | TestOptionalTopFraming |
+| POP3-TOP-04 | RFC 1939 §§5, 7 (TOP) | Normative | Refuse deletion-marked messages; RSET restores access using the original message number. | TestOptionalDeleteReset |
+| POP3-UIDL-01 | RFC 1939 §§3, 7 (UIDL) | Normative | Require TRANSACTION; reject invalid, nonexistent or extra message-number arguments. | TestOptionalArguments |
+| POP3-UIDL-02 | RFC 1939 §§3, 7 (UIDL) | Normative | Single and multiline listings contain the exact decimal message number, one space and UID only; terminate lists with dot CRLF, including an empty maildrop. | TestOptionalUIDLListing |
+| POP3-UIDL-03 | RFC 1939 §§4–5, 7 (UIDL) | Normative | Retain numbers and UIDs across repeated commands within a session; exclude deletion marks from lists and single replies; RSET restores the original listings. | TestOptionalDeleteReset |
+| POP3-UIDL-04 | RFC 1939 §7 (UIDL) | Normative | Emit UIDs of 1–70 printable ASCII characters (0x21–0x7e); reject malformed visible backend UIDs without corrupting subsequent response framing. | TestOptionalUIDLListing, TestOptionalUIDLInvalidBackend |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -91,7 +113,7 @@ missing mappings, unknown IDs and duplicate IDs must fail.
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, optional TOP/UIDL,
+contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
 TLS/STLS, remaining extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
