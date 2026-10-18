@@ -3,7 +3,8 @@
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
 USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
 behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
-behavior in TRANSACTION. It is not an inventory of all applicable
+behavior in TRANSACTION, plus selected RFC 2449 §4 command-length support
+and separately labeled command-reader policy. It is not an inventory of all applicable
 RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -146,6 +147,30 @@ requires the relevant status and ordering, not those particular words.
 | POP3-PIPELINING-04 | RFC 2449 §6.6; RFC 1939 §3 | MUST | Reply negatively to invalid and unknown queued commands in order; subsequent valid commands retain their replies and session access. | TestPipeliningErrorRecovery |
 | POP3-PIPELINING-05 | RFC 2449 §6.6; RFC 1939 §5 | MUST | Process queued DELE, queries and RSET in turn; repeated batches observe deletion then restoration with stable message numbers and UIDs. | TestPipeliningStateOrder |
 
+## RFC 2449 §§3–4: selected command-length support and library policy
+
+CAPA servers MUST support commands up to 255 octets including CRLF. This is
+an acceptance requirement, not a server rejection ceiling at 255. The normative
+proof sends exact 255-octet ASCII USER and PASS lines, both whole and with
+fragmented CRLF, and checks complete credential bytes at Authenticate, successful
+authentication and subsequent response framing. This covers selected credential
+commands, not every command, capability-specific maximum or parser grammar.
+
+The POLICY rows describe the existing 1024-byte bounded reader, including LF.
+Acceptance beyond 255, non-ASCII credential bytes and bare LF are implementation
+controls, not claims of RFC-conforming client syntax. A buffer of 1024 bytes
+without LF receives one exact error and connection termination; the server does
+not resynchronize. Exact explanatory error text is library behavior. These tests
+use only public Session/net.Pipe and memory; runtime limits and parsing are unchanged.
+The checker accepts `Normative` as its neutral level for these explicitly labeled
+library-policy rows; it does not make the policy an RFC requirement.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-LENGTH-01 | RFC 2449 §§3–4 | MUST | Support 255-octet command lines including CRLF (proved for USER/PASS with complete credentials, including fragmented delivery). | TestCommandLength255Credentials |
+| POP3-LENGTH-POLICY-01 | Library policy (session.go bounded reader) | Normative | Accept complete 1024-byte USER/PASS lines including LF, preserving credential bytes; count UTF-8 bytes rather than runes. | TestCommandLengthPolicy1024Accepted |
+| POP3-LENGTH-POLICY-02 | Library policy (session.go bounded reader) | Normative | Refuse a 1024-byte buffer without LF with one error then close; do not authenticate or resynchronize a 1025-byte complete line or queued command. | TestCommandLengthPolicyOverflowCloses |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -166,7 +191,8 @@ contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reus
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including AUTHORIZATION/TLS and transport-window
 handling), RESP-CODES semantics, other extension requirements and CAPA configuration variations,
-RFC 2449 command-length bounds, complete RFC vectors and differential testing,
+remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
+complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
 adoption of the shared reusable workflow. Keep library/root coverage separate
 from checker/tool coverage. Existing parser fuzzing, octet-count and log-redaction
