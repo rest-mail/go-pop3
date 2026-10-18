@@ -145,15 +145,26 @@ func credentialKeyword(keyword string) bool {
 	return false
 }
 
-// FuzzRedactCommand checks the log redaction boundary: a line the session
-// dispatches as PASS, APOP or AUTH logs the same text whatever its argument (so
-// the log cannot reveal any of it), and every other line is logged verbatim.
+// FuzzRedactCommand checks the log redaction policy. A line whose keyword is a
+// credential command (PASS, APOP, AUTH) logs the same text whatever its argument;
+// one whose keyword is another RFC command logs verbatim; and every other line
+// logs the same text whatever it is, so nothing of a malformed line, which may be
+// a credential the client mistyped, reaches the log.
 func FuzzRedactCommand(f *testing.F) {
 	for _, s := range commandSeeds {
 		f.Add(s, "hunter2")
 	}
 	f.Add("PASS a", "a")
 	f.Add("AUTH PLAIN", "AUTH PLAIN")
+	// Credentials in lines the parser rejects as unknown commands (#374).
+	for _, s := range []string{
+		" PASS hunter2", "\tPASS hunter2", "PASS\thunter2", "paſs hunter2",
+		"PАSS hunter2", "PASS\x80 hunter2", "hunter2", "APOP\talice hunter2",
+		" AUTH PLAIN aHVudGVyMg==", "AUTH\u0131 PLAIN aHVudGVyMg==", "aHVudGVyMg==",
+		"\x00canary:hunter2", "<unknown command redacted>",
+	} {
+		f.Add(s, "hunter2")
+	}
 	f.Fuzz(func(t *testing.T, line, other string) {
 		skipOversized(t, line, other)
 		got := redactCommand(line)
@@ -163,23 +174,39 @@ func FuzzRedactCommand(f *testing.F) {
 		if credentialKeyword(keyword) != dispatchedAsCredential {
 			t.Fatalf("keyword %q of %q: credential command %v, but parsed as %q", keyword, line, credentialKeyword(keyword), cmd)
 		}
-		if !dispatchedAsCredential || arg == "" {
-			if got != line {
-				t.Fatalf("redactCommand(%q) = %q, want the line verbatim", line, got)
-			}
-			return
-		}
-		// Non-interference: swapping the secret for any other non-empty argument
-		// leaves the logged text unchanged, so the log carries nothing of it.
+		// canary starts with a NUL, so no keyword built from it is a command.
 		canary := "\x00canary:" + other
-		if leaked := redactCommand(keyword + " " + canary); leaked != got {
-			t.Fatalf("redactCommand depends on the secret: %q -> %q but %q -> %q", line, got, keyword+" "+canary, leaked)
-		}
-		if strings.Contains(got, canary) {
-			t.Fatalf("redactCommand(%q) = %q reveals the argument", line, got)
-		}
-		if !strings.EqualFold(got[:min(len(got), len(cmd))], cmd) {
-			t.Fatalf("redactCommand(%q) = %q drops the keyword %q", line, got, cmd)
+		switch {
+		case dispatchedAsCredential && arg == "":
+			if got != line {
+				t.Fatalf("redactCommand(%q) = %q, want the argument-less line verbatim", line, got)
+			}
+		case dispatchedAsCredential:
+			// Non-interference: swapping the secret for any other non-empty
+			// argument leaves the logged text unchanged, so the log carries
+			// nothing of it.
+			if leaked := redactCommand(keyword + " " + canary); leaked != got {
+				t.Fatalf("redactCommand depends on the secret: %q -> %q but %q -> %q", line, got, keyword+" "+canary, leaked)
+			}
+			if strings.Contains(got, canary) {
+				t.Fatalf("redactCommand(%q) = %q reveals the argument", line, got)
+			}
+			if !strings.EqualFold(got[:min(len(got), len(cmd))], cmd) {
+				t.Fatalf("redactCommand(%q) = %q drops the keyword %q", line, got, cmd)
+			}
+		case slices.Contains(rfcKeywords, asciiUpper(keyword)):
+			if got != line {
+				t.Fatalf("redactCommand(%q) = %q, want the %s line verbatim", line, got, cmd)
+			}
+		default:
+			// An unknown or malformed line may be a credential sent with the
+			// wrong syntax: the log must not depend on any byte of it.
+			if leaked := redactCommand(canary); leaked != got {
+				t.Fatalf("redactCommand depends on an unknown line: %q -> %q but %q -> %q", line, got, canary, leaked)
+			}
+			if strings.Contains(got, canary) {
+				t.Fatalf("redactCommand(%q) = %q reveals the line", line, got)
+			}
 		}
 	})
 }

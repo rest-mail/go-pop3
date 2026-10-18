@@ -26,6 +26,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   empty messages, keep their size. A backend that stores `Message.Size` it
   computed earlier with `OctetCount` should recompute it for such messages
   (part of rest-mail-server#374).
+- **Malformed credential lines no longer reach the debug log.** Only a
+  well-formed `PASS`, `APOP` or `AUTH` line had its argument redacted, so a
+  credential sent with the wrong syntax was logged in full: ` PASS secret`,
+  `PASS<TAB>secret`, `paſs secret`, `PАSS secret` (Cyrillic А), a password typed
+  on a line by itself, or a SASL response sent after an `AUTH` the server does
+  not offer. A line whose keyword is not a known command is now logged only as
+  `<unknown command redacted>`; known non-credential commands are still logged as
+  sent. Which commands the server accepts is unchanged (part of
+  rest-mail-server#374).
 
 ### Added
 
