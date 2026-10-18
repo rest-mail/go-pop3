@@ -30,24 +30,29 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	commandLength := read("internal/rfctest/command_length_test.go")
 	commandErrors := read("internal/rfctest/command_errors_test.go")
 	authPipelining := read("internal/rfctest/auth_pipelining_test.go")
-	for _, tc := range []struct{ name, checklist, tests, authPipelining, want string }{
-		{"valid", checklist, tests, authPipelining, ""},
-		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
-		{"unmapped-command-error-row", strings.Replace(checklist, "| TestCommandErrorsAuthorization, TestCommandErrorsTransaction |", "| |", 1), tests, authPipelining, "POP3-COMMAND-01 names no test"},
-		{"missing-annotation", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// mapping removed", 1), authPipelining, "TestAuthenticationFailureRetry does not name POP3-PASS-03"},
-		{"missing-test", strings.Replace(checklist, "TestAuthenticationFailureRetry", "TestMissing", 1), tests, authPipelining, "POP3-PASS-03 lists TestMissing, which is not a test"},
-		{"unknown-id", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// checklist: POP3-UNKNOWN-99", 1), authPipelining, "names POP3-UNKNOWN-99, which is not in"},
-		{"duplicate-id", strings.Replace(checklist, "| POP3-AUTH-02 |", "| POP3-AUTH-01 |", 1), tests, authPipelining, "POP3-AUTH-01 is already used"},
-		{"unmapped-row", strings.Replace(checklist, "| TestAuthenticationFailureRetry |", "| |", 1), tests, authPipelining, "POP3-PASS-03 names no test"},
-		{"missing-auth-pipeline-success-test", strings.Replace(checklist, "TestAuthPipeliningSuccess", "TestMissingAuthPipeline", 1), tests, authPipelining, "POP3-PIPELINING-06 lists TestMissingAuthPipeline, which is not a test"},
-		{"missing-auth-pipeline-retry-test", strings.Replace(checklist, "TestAuthPipeliningFailureRetry", "TestMissingAuthRetry", 1), tests, authPipelining, "POP3-PIPELINING-07 lists TestMissingAuthRetry, which is not a test"},
-		{"unmapped-auth-pipeline-success-row", strings.Replace(checklist, "| TestAuthPipeliningSuccess |", "| |", 1), tests, authPipelining, "POP3-PIPELINING-06 names no test"},
-		{"unmapped-auth-pipeline-retry-row", strings.Replace(checklist, "| TestAuthPipeliningFailureRetry |", "| |", 1), tests, authPipelining, "POP3-PIPELINING-07 names no test"},
-		{"unmapped-auth-pipeline-policy-row", strings.ReplaceAll(checklist, "| TestAuthPipeliningFailureRetry |", "| |"), tests, authPipelining, "POP3-PIPELINING-POLICY-01 names no test"},
-		{"missing-auth-pipeline-success-annotation", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-06", "// mapping removed", 1), "TestAuthPipeliningSuccess does not name POP3-PIPELINING-06"},
-		{"missing-auth-pipeline-retry-annotation", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-07 POP3-PIPELINING-POLICY-01", "// mapping removed", 1), "TestAuthPipeliningFailureRetry does not name POP3-PIPELINING-07"},
-		{"missing-auth-pipeline-policy-annotation", checklist, tests, strings.Replace(authPipelining, "POP3-PIPELINING-07 POP3-PIPELINING-POLICY-01", "POP3-PIPELINING-07", 1), "TestAuthPipeliningFailureRetry does not name POP3-PIPELINING-POLICY-01"},
-		{"unknown-auth-pipeline-id", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-06", "// checklist: POP3-UNKNOWN-99", 1), "TestAuthPipeliningSuccess names POP3-UNKNOWN-99, which is not in"},
+	sessionVector := read("internal/rfctest/session_vector_test.go")
+	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, want string }{
+		{"valid", checklist, tests, authPipelining, sessionVector, ""},
+		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
+		{"unmapped-command-error-row", strings.Replace(checklist, "| TestCommandErrorsAuthorization, TestCommandErrorsTransaction |", "| |", 1), tests, authPipelining, sessionVector, "POP3-COMMAND-01 names no test"},
+		{"missing-annotation", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// mapping removed", 1), authPipelining, sessionVector, "TestAuthenticationFailureRetry does not name POP3-PASS-03"},
+		{"missing-test", strings.Replace(checklist, "TestAuthenticationFailureRetry", "TestMissing", 1), tests, authPipelining, sessionVector, "POP3-PASS-03 lists TestMissing, which is not a test"},
+		{"unknown-id", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// checklist: POP3-UNKNOWN-99", 1), authPipelining, sessionVector, "names POP3-UNKNOWN-99, which is not in"},
+		{"duplicate-id", strings.Replace(checklist, "| POP3-AUTH-02 |", "| POP3-AUTH-01 |", 1), tests, authPipelining, sessionVector, "POP3-AUTH-01 is already used"},
+		{"unmapped-row", strings.Replace(checklist, "| TestAuthenticationFailureRetry |", "| |", 1), tests, authPipelining, sessionVector, "POP3-PASS-03 names no test"},
+		{"missing-auth-pipeline-success-test", strings.Replace(checklist, "TestAuthPipeliningSuccess", "TestMissingAuthPipeline", 1), tests, authPipelining, sessionVector, "POP3-PIPELINING-06 lists TestMissingAuthPipeline, which is not a test"},
+		{"missing-auth-pipeline-retry-test", strings.Replace(checklist, "TestAuthPipeliningFailureRetry", "TestMissingAuthRetry", 1), tests, authPipelining, sessionVector, "POP3-PIPELINING-07 lists TestMissingAuthRetry, which is not a test"},
+		{"unmapped-auth-pipeline-success-row", strings.Replace(checklist, "| TestAuthPipeliningSuccess |", "| |", 1), tests, authPipelining, sessionVector, "POP3-PIPELINING-06 names no test"},
+		{"unmapped-auth-pipeline-retry-row", strings.Replace(checklist, "| TestAuthPipeliningFailureRetry |", "| |", 1), tests, authPipelining, sessionVector, "POP3-PIPELINING-07 names no test"},
+		{"unmapped-auth-pipeline-policy-row", strings.ReplaceAll(checklist, "| TestAuthPipeliningFailureRetry |", "| |"), tests, authPipelining, sessionVector, "POP3-PIPELINING-POLICY-01 names no test"},
+		{"missing-auth-pipeline-success-annotation", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-06", "// mapping removed", 1), sessionVector, "TestAuthPipeliningSuccess does not name POP3-PIPELINING-06"},
+		{"missing-auth-pipeline-retry-annotation", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-07 POP3-PIPELINING-POLICY-01", "// mapping removed", 1), sessionVector, "TestAuthPipeliningFailureRetry does not name POP3-PIPELINING-07"},
+		{"missing-auth-pipeline-policy-annotation", checklist, tests, strings.Replace(authPipelining, "POP3-PIPELINING-07 POP3-PIPELINING-POLICY-01", "POP3-PIPELINING-07", 1), sessionVector, "TestAuthPipeliningFailureRetry does not name POP3-PIPELINING-POLICY-01"},
+		{"unknown-auth-pipeline-id", checklist, tests, strings.Replace(authPipelining, "// checklist: POP3-PIPELINING-06", "// checklist: POP3-UNKNOWN-99", 1), sessionVector, "TestAuthPipeliningSuccess names POP3-UNKNOWN-99, which is not in"},
+		{"missing-session-vector-test", strings.Replace(checklist, "TestRFC1939AdaptedTransactionExample", "TestMissingSessionVector", 1), tests, authPipelining, sessionVector, "POP3-EXAMPLE-01 lists TestMissingSessionVector, which is not a test"},
+		{"unmapped-session-vector-row", strings.Replace(checklist, "| TestRFC1939AdaptedTransactionExample |", "| |", 1), tests, authPipelining, sessionVector, "POP3-EXAMPLE-01 names no test"},
+		{"missing-session-vector-annotation", checklist, tests, authPipelining, strings.Replace(sessionVector, "// checklist: POP3-EXAMPLE-01", "// mapping removed", 1), "TestRFC1939AdaptedTransactionExample does not name POP3-EXAMPLE-01"},
+		{"missing-session-vector-row", removeSessionVectorRow(checklist), tests, authPipelining, sessionVector, "TestRFC1939AdaptedTransactionExample names POP3-EXAMPLE-01, which is not in"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -64,6 +69,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "command_length_test.go"):  commandLength,
 				filepath.Join(dir, "command_errors_test.go"):  commandErrors,
 				filepath.Join(dir, "auth_pipelining_test.go"): tc.authPipelining,
+				filepath.Join(dir, "session_vector_test.go"):  tc.sessionVector,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
@@ -72,7 +78,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "66 items (66 mapped to tests, 0 not applicable), 42 tests") {
+				if code != 0 || !strings.Contains(out.String(), "67 items (67 mapped to tests, 0 not applicable), 43 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -82,4 +88,14 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func removeSessionVectorRow(checklist string) string {
+	lines := strings.Split(checklist, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "| POP3-EXAMPLE-01 |") {
+			lines[i] = ""
+		}
+	}
+	return strings.Join(lines, "\n")
 }
