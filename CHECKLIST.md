@@ -3,8 +3,8 @@
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
 USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
 behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
-behavior in TRANSACTION, plus selected RFC 2449 RESP-CODES and RFC 3206 AUTH
-response-code behavior, plus selected RFC 2449 §4 command-length support
+behavior across AUTHORIZATION/TRANSACTION, plus selected RFC 2449 RESP-CODES
+and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-length support
 and separately labeled command-reader policy. It is not an inventory of all applicable
 RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
@@ -129,14 +129,15 @@ universal RFC mandates. Nil TLS configuration permits plaintext authentication.
 ## RFC 2449 §6.6: selected PIPELINING requirements
 
 Each bounded batch is written completely before reading any individual reply,
-after ordinary sequential USER/PASS authentication. Public Session/net.Pipe
-proofs reuse the canonical CRLF corpus and opaque UIDs distinct from wire
-numbers. Exact response lines check order, CRLF, dot stuffing and complete
-multiline terminators before subsequent replies. Small batches fit the session's
+either after sequential login or across USER/PASS authentication. Public
+Session/net.Pipe proofs use in-memory backends; transaction proofs reuse the
+canonical CRLF corpus and opaque UIDs distinct from wire numbers. Exact response
+lines check order, CRLF, dot stuffing and complete multiline terminators before
+subsequent replies. Small batches fit the session's
 command-reader buffer, avoiding synchronous net.Pipe write deadlock; this does
 not prove arbitrary batch sizes or transport-window handling. Existing bounded
 client deadlines and session cleanup apply; no extra goroutines are started.
-Authentication/TLS pipelining, all extension combinations, backend lifetime,
+TLS pipelining, all extension combinations, backend lifetime,
 rate policy and atomic batch guarantees are outside this selected inventory.
 Exact explanatory reply text below records current library behavior; the RFC
 requires the relevant status and ordering, not those particular words.
@@ -148,6 +149,16 @@ requires the relevant status and ordering, not those particular words.
 | POP3-PIPELINING-03 | RFC 2449 §6.6; RFC 1939 §§3, 5, 7 | MUST | Process queued LIST/TOP/RETR/NOOP in turn, finishing each multiline block and dot terminator before the next response. | TestPipeliningMultilineReplies |
 | POP3-PIPELINING-04 | RFC 2449 §6.6; RFC 1939 §3 | MUST | Reply negatively to invalid and unknown queued commands in order; subsequent valid commands retain their replies and session access. | TestPipeliningErrorRecovery |
 | POP3-PIPELINING-05 | RFC 2449 §6.6; RFC 1939 §5 | MUST | Process queued DELE, queries and RSET in turn; repeated batches observe deletion then restoration with stable message numbers and UIDs. | TestPipeliningStateOrder |
+| POP3-PIPELINING-06 | RFC 2449 §6.6 | MUST | Process a bounded CAPA/STAT/USER/PASS/STAT/CAPA/NOOP batch in turn across successful login, completing each capability block before subsequent replies and loading messages only after accepted credentials. | TestAuthPipeliningSuccess |
+| POP3-PIPELINING-07 | RFC 2449 §6.6 | MUST | Process a bounded failed USER/PASS, unauthenticated STAT, and fresh successful USER/PASS/STAT batch in turn with ordered replies and exactly the corresponding backend authentication and enumeration calls. | TestAuthPipeliningFailureRetry |
+| POP3-PIPELINING-POLICY-01 | Library policy (session.go authentication reset/retry) | Normative | Within one queued batch, a failed PASS clears pending USER: refuse PASS without fresh USER without calling Authenticate, retain AUTHORIZATION, and allow a fresh successful USER/PASS. | TestAuthPipeliningFailureRetry |
+
+The authentication batches additionally check CAPA multiline framing and exact
+Authenticate arguments/call order, with no Messages before accepted credentials,
+no retrieval/mark-seen/delete calls, fresh STAT/NOOP, and QUIT/EOF with joined
+session goroutines. They use nil TLS and the no-op limiter. RFC 2449 §6.6 gives
+USER/PASS batching as an example; reset/retry details above record existing
+library policy, not an additional RFC mandate or strict immediate-PASS claim.
 
 ## RFC 2449 §§3, 6.4, 8 and RFC 3206 §5: selected RESP-CODES/AUTH behavior
 
@@ -236,9 +247,9 @@ include the complete AUTHORIZATION inventory (notably strict immediate-PASS
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
 contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
-remaining PIPELINING vectors (including AUTHORIZATION/TLS and transport-window
-handling), remaining RESP-CODES semantics (including hierarchical/unknown-code
-client handling, LOGIN-DELAY, IN-USE and SYS), RFC 3206 §§5–6's SHOULD to
+remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
+and transport-window handling), remaining RESP-CODES semantics (including
+hierarchical/unknown-code client handling, LOGIN-DELAY, IN-USE and SYS), RFC 3206 §§5–6's SHOULD to
 advertise AUTH-RESP-CODE (currently absent) and its full credential-error
 contract, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
