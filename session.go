@@ -43,7 +43,7 @@ type Session struct {
 
 type authState struct {
 	authenticated bool
-	username      string // stored between USER and PASS
+	username      string // pending only until the next command
 }
 
 // NewSession creates a POP3 session over conn, authenticating against backend.
@@ -117,6 +117,12 @@ func (s *Session) Handle() {
 		slog.Debug("pop3: recv", "remote", s.conn.RemoteAddr(), "cmd", redactCommand(line))
 
 		cmd, arg := parseCommand(line)
+		// RFC 1939 §7: PASS must immediately follow a successful USER.
+		// Clear before dispatch so even refused commands and malformed USER
+		// invalidate the previous exchange. Ignored blank lines stay ignored.
+		if cmd != "PASS" {
+			s.auth.username = ""
+		}
 
 		switch cmd {
 		case "CAPA":
@@ -254,11 +260,15 @@ func (s *Session) handleUser(arg string) {
 }
 
 func (s *Session) handlePass(arg string) {
+	// Consume once, including empty PASS and every backend failure path. Keep
+	// the username locally for authentication and logs after clearing state.
+	username := s.auth.username
+	s.auth.username = ""
 	if s.auth.authenticated {
 		s.err("Already authenticated")
 		return
 	}
-	if s.auth.username == "" {
+	if username == "" {
 		s.err("USER first")
 		return
 	}
@@ -269,11 +279,11 @@ func (s *Session) handlePass(arg string) {
 
 	ip := extractIP(s.conn.RemoteAddr().String())
 
-	mailbox, err := s.backend.Authenticate(s.auth.username, arg)
+	mailbox, err := s.backend.Authenticate(username, arg)
 	if err != nil {
 		slog.Warn("pop3: auth failed",
 			"remote", s.conn.RemoteAddr(),
-			"user", s.auth.username,
+			"user", username,
 			"event", "pop3_auth_failed",
 			"ip", ip,
 		)
@@ -284,7 +294,6 @@ func (s *Session) handlePass(arg string) {
 			return
 		}
 		s.err("[AUTH] Authentication failed")
-		s.auth.username = "" // reset
 		return
 	}
 
@@ -296,10 +305,9 @@ func (s *Session) handlePass(arg string) {
 	if mailbox == nil {
 		slog.Error("pop3: backend returned nil mailbox",
 			"remote", s.conn.RemoteAddr(),
-			"user", s.auth.username,
+			"user", username,
 		)
 		s.err("Failed to load mailbox")
-		s.auth.username = "" // reset; client may retry
 		return
 	}
 
@@ -311,7 +319,6 @@ func (s *Session) handlePass(arg string) {
 	if err != nil {
 		slog.Error("pop3: failed to load mailbox", "error", err)
 		s.err("Failed to load mailbox")
-		s.auth.username = "" // stay in AUTHORIZATION; client may retry
 		return
 	}
 
@@ -320,7 +327,7 @@ func (s *Session) handlePass(arg string) {
 	s.mailbox = mailbox
 	s.messages = messages
 
-	slog.Info("pop3: authenticated", "remote", s.conn.RemoteAddr(), "user", s.auth.username, "messages", len(s.messages))
+	slog.Info("pop3: authenticated", "remote", s.conn.RemoteAddr(), "user", username, "messages", len(s.messages))
 	s.ok("Authentication successful")
 }
 
@@ -631,8 +638,9 @@ func (s *Session) handleQuit() {
 // trailing token makes the command line a syntax error that must be answered
 // -ERR rather than silently ignored (issue #14). When arg is non-empty this
 // writes the -ERR reply and returns true; the caller then skips the handler and
-// leaves session state untouched. An empty arg returns false so the handler
-// runs normally. Only a non-whitespace token counts as an argument, so a stray
+// preserves transaction state. Dispatch still invalidates pending USER.
+// An empty arg returns false so the handler runs normally. Only a
+// non-whitespace token counts as an argument, so a stray
 // trailing space is tolerated rather than treated as a syntax error.
 func (s *Session) rejectArg(arg string) bool {
 	if strings.TrimSpace(arg) != "" {
