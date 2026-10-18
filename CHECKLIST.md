@@ -2,7 +2,8 @@
 
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
 USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
-behavior and RFC 2595 §4 STLS transitions. It is not an inventory of all applicable
+behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
+behavior in TRANSACTION. It is not an inventory of all applicable
 RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -122,6 +123,29 @@ universal RFC mandates. Nil TLS configuration permits plaintext authentication.
 | POP3-TLS-POLICY-01 | RFC 2595 §§2.5, 4 (library policy) | Normative | With TLS configured, refuse plaintext USER/PASS without calling backend authentication; accept valid credentials through TLS exactly once. | TestSTLSCredentials |
 | POP3-TLS-POLICY-02 | RFC 2595 §2.5 (library policy) | Normative | Close after a malformed TLS record header during STLS negotiation without calling backend authentication. | TestSTLSHandshakeFailure |
 
+## RFC 2449 §6.6: selected PIPELINING requirements
+
+Each bounded batch is written completely before reading any individual reply,
+after ordinary sequential USER/PASS authentication. Public Session/net.Pipe
+proofs reuse the canonical CRLF corpus and opaque UIDs distinct from wire
+numbers. Exact response lines check order, CRLF, dot stuffing and complete
+multiline terminators before subsequent replies. Small batches fit the session's
+command-reader buffer, avoiding synchronous net.Pipe write deadlock; this does
+not prove arbitrary batch sizes or transport-window handling. Existing bounded
+client deadlines and session cleanup apply; no extra goroutines are started.
+Authentication/TLS pipelining, all extension combinations, backend lifetime,
+rate policy and atomic batch guarantees are outside this selected inventory.
+Exact explanatory reply text below records current library behavior; the RFC
+requires the relevant status and ordering, not those particular words.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-PIPELINING-01 | RFC 2449 §6.6 | Normative | Announce parameterless PIPELINING in AUTHORIZATION and TRANSACTION without differing arguments. | TestPipeliningCapabilities |
+| POP3-PIPELINING-02 | RFC 2449 §6.6 | MUST | Process each command in turn: a queued NOOP/STAT/LIST 1/UIDL 1 batch returns the corresponding complete single-line replies in order. | TestPipeliningSingleReplies |
+| POP3-PIPELINING-03 | RFC 2449 §6.6; RFC 1939 §§3, 5, 7 | MUST | Process queued LIST/TOP/RETR/NOOP in turn, finishing each multiline block and dot terminator before the next response. | TestPipeliningMultilineReplies |
+| POP3-PIPELINING-04 | RFC 2449 §6.6; RFC 1939 §3 | MUST | Reply negatively to invalid and unknown queued commands in order; subsequent valid commands retain their replies and session access. | TestPipeliningErrorRecovery |
+| POP3-PIPELINING-05 | RFC 2449 §6.6; RFC 1939 §5 | MUST | Process queued DELE, queries and RSET in turn; repeated batches observe deletion then restoration with stable message numbers and UIDs. | TestPipeliningStateOrder |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -140,7 +164,8 @@ include the complete AUTHORIZATION inventory (notably strict immediate-PASS
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
 contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
-remaining extension requirements and CAPA configuration variations,
+remaining PIPELINING vectors (including AUTHORIZATION/TLS and transport-window
+handling), RESP-CODES semantics, other extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
 adoption of the shared reusable workflow. Keep library/root coverage separate
