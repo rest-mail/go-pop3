@@ -31,6 +31,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	commandErrors := read("internal/rfctest/command_errors_test.go")
 	authPipelining := read("internal/rfctest/auth_pipelining_test.go")
 	sessionVector := read("internal/rfctest/session_vector_test.go")
+	uidSessions := read("internal/rfctest/uidl_sessions_test.go")
 	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, want string }{
 		{"valid", checklist, tests, authPipelining, sessionVector, ""},
 		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
@@ -70,6 +71,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "command_errors_test.go"):  commandErrors,
 				filepath.Join(dir, "auth_pipelining_test.go"): tc.authPipelining,
 				filepath.Join(dir, "session_vector_test.go"):  tc.sessionVector,
+				filepath.Join(dir, "uidl_sessions_test.go"):   uidSessions,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
@@ -78,7 +80,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "67 items (67 mapped to tests, 0 not applicable), 43 tests") {
+				if code != 0 || !strings.Contains(out.String(), "69 items (69 mapped to tests, 0 not applicable), 45 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -98,4 +100,66 @@ func removeSessionVectorRow(checklist string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Each new UIDL-session proof must remain connected in both directions. These
+// are checker-input mutations only; they never execute or alter the wire tests.
+func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
+	checklist, err := os.ReadFile(filepath.Join("..", "..", "CHECKLIST.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := filepath.Glob(filepath.Join("..", "rfctest", "*_test.go"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("wire test paths: %v (%v)", paths, err)
+	}
+	original := map[string]string{}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		original[filepath.Base(path)] = string(data)
+	}
+	for _, proof := range []struct{ id, test string }{
+		{"POP3-UIDL-05", "TestUIDLSequentialSessionsDeleteAndAppend"},
+		{"POP3-UIDL-06", "TestUIDLSequentialSessionsWithoutUpdate"},
+	} {
+		var row string
+		for _, line := range strings.Split(string(checklist), "\n") {
+			if strings.HasPrefix(line, "| "+proof.id+" |") {
+				row = line
+			}
+		}
+		if row == "" {
+			t.Fatalf("missing real row %s", proof.id)
+		}
+		source := original["uidl_sessions_test.go"]
+		for _, mutation := range []struct{ name, checklist, source, want string }{
+			{"missing-test", string(checklist), strings.Replace(source, "func "+proof.test+"(", "func missingProof(", 1), proof.id + " lists " + proof.test + ", which is not a test"},
+			{"missing-row", strings.Replace(string(checklist), row, "", 1), source, proof.test + " names " + proof.id + ", which is not in"},
+			{"missing-annotation", string(checklist), strings.Replace(source, "// checklist: "+proof.id, "// mapping removed", 1), proof.test + " does not name " + proof.id},
+			{"empty-mapping", strings.Replace(string(checklist), "| "+proof.test+" |", "| |", 1), source, proof.id + " names no test"},
+		} {
+			t.Run(proof.id+"/"+mutation.name, func(t *testing.T) {
+				dir := t.TempDir()
+				file := filepath.Join(dir, "CHECKLIST.md")
+				if err := os.WriteFile(file, []byte(mutation.checklist), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				for name, content := range original {
+					if name == "uidl_sessions_test.go" {
+						content = mutation.source
+					}
+					if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var out bytes.Buffer
+				if code := run([]string{"-file", file, dir}, &out, &out); code != 1 || !strings.Contains(out.String(), mutation.want) {
+					t.Fatalf("exit %d, want 1 and %q:\n%s", code, mutation.want, &out)
+				}
+			})
+		}
+	}
 }

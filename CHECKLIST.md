@@ -83,14 +83,23 @@ AUTHORIZATION QUIT remains covered by POP3-AUTH-04 above.
 
 ## RFC 1939 §7: selected optional TOP/UIDL requirements
 
-These tests reuse the canonical message corpus and public Session/net.Pipe
-helpers with opaque backend UIDs distinct from wire message numbers. UID stability
-here means repeated commands within one session, including DELE/RSET; persistence
-across sessions, non-reuse over a maildrop's lifetime and backend durability remain
-unproved integration follow-ups. Format checks exercise existing fail-safe error
-handling, not new runtime work. The duplicate-ID negative case records the
-library's current rejection policy, not a claim that the RFC forbids equal hashes
-for identical message copies.
+TOP and within-session UIDL tests reuse the canonical message corpus. All use
+public Session/net.Pipe helpers with opaque backend UIDs distinct from wire
+message numbers. UID stability
+within one session includes DELE/RSET. Sequential-session tests additionally
+prove Session faithfully emits stable backend IDs from a synchronized in-memory
+model after committed deletion renumbers a survivor, after a distinct fixture
+message is appended, and after EOF without UPDATE. These are fixture proofs, not
+production backend persistence, crash recovery, global UID generation/non-reuse
+or maildrop lifetime guarantees; those remain integration follow-ups. Format checks
+exercise existing fail-safe error handling, not new runtime work. The duplicate-ID
+negative case records the library's current rejection policy, not a claim that the
+RFC forbids equal hashes for identical message copies.
+
+Sequential sessions use dynamic copied Messages snapshots reflecting successful
+Delete calls. STAT checks fixed fixture metadata, not message-body octet accuracy.
+Every connection has bounded wire deadlines and explicit QUIT/EOF with a joined
+session goroutine before reconnecting; no database or socket listener is used.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -102,6 +111,8 @@ for identical message copies.
 | POP3-UIDL-02 | RFC 1939 §§3, 7 (UIDL) | Normative | Single and multiline listings contain the exact decimal message number, one space and UID only; terminate lists with dot CRLF, including an empty maildrop. | TestOptionalUIDLListing |
 | POP3-UIDL-03 | RFC 1939 §§4–5, 7 (UIDL) | Normative | Retain numbers and UIDs across repeated commands within a session; exclude deletion marks from lists and single replies; RSET restores the original listings. | TestOptionalDeleteReset |
 | POP3-UIDL-04 | RFC 1939 §7 (UIDL) | Normative | Emit UIDs of 1–70 printable ASCII characters (0x21–0x7e); reject malformed visible backend UIDs without corrupting subsequent response framing. | TestOptionalUIDLListing, TestOptionalUIDLInvalidBackend |
+| POP3-UIDL-05 | RFC 1939 §7 (UIDL) | Normative | In sequential sessions over a stable-ID memory backend, retain a survivor UID when successful QUIT deletion renumbers it from 2 to 1; a later appended fixture has a distinct UID without changing the survivor identity. | TestUIDLSequentialSessionsDeleteAndAppend |
+| POP3-UIDL-06 | RFC 1939 §7 (UIDL) | Normative | In sequential sessions over a stable-ID memory backend, retain original UIDs and listings after EOF without UPDATE, including an uncommitted DELE mark. | TestUIDLSequentialSessionsWithoutUpdate |
 
 ## RFC 2595 §4: selected POP3 STLS and CAPA transitions
 
@@ -266,17 +277,20 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **67 mapped rows / 43 named wire tests**
-(previous 66/42 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **69 mapped rows / 45 named wire tests**
+(previous 67/43 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
-its row mapping. Generic checker source/tests remain pinned and unchanged.
+its row mapping. UIDL-session controls additionally remove each new test, row
+and annotation, and empty each new row mapping; every mutation must fail. Generic checker
+source/tests remain pinned and unchanged.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, remaining TOP/UIDL vectors and cross-session UID persistence/non-reuse,
+contracts, remaining TOP/UIDL vectors and production cross-session UID persistence,
+crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
