@@ -27,6 +27,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	stls := read("internal/rfctest/stls_test.go")
 	pipelining := read("internal/rfctest/pipelining_test.go")
 	responseCodes := read("internal/rfctest/response_codes_test.go")
+	commandLength := read("internal/rfctest/command_length_test.go")
 	for _, tc := range []struct{ name, checklist, tests, want string }{
 		{"valid", checklist, tests, ""},
 		{"missing-annotation", checklist, strings.Replace(tests, "// checklist: POP3-PASS-03", "// mapping removed", 1), "TestAuthenticationFailureRetry does not name POP3-PASS-03"},
@@ -47,6 +48,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "stls_test.go"):           stls,
 				filepath.Join(dir, "pipelining_test.go"):     pipelining,
 				filepath.Join(dir, "response_codes_test.go"): responseCodes,
+				filepath.Join(dir, "command_length_test.go"): commandLength,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
