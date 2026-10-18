@@ -1,7 +1,7 @@
 # POP3 RFC checklist — PARTIAL checked foundation
 
 This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
-USER/PASS, CAPA and RFC 1939 §5 TRANSACTION behavior. It is not an inventory of
+USER/PASS, CAPA and RFC 1939 §§5–6 TRANSACTION/UPDATE behavior. It is not an inventory of
 all applicable RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -55,6 +55,26 @@ Deletion references below cover LIST, RETR and DELE; optional TOP/UIDL are follo
 | POP3-NOOP-01 | RFC 1939 §5 (NOOP) | Normative | Reply positively without altering message visibility or deletion marks. | TestTransactionNoop |
 | POP3-RSET-01 | RFC 1939 §5 (RSET) | Normative | Reply positively and clear all deletion marks, restoring listings, counts and retrieval. | TestTransactionDeleteReset |
 
+## RFC 1939 §6: selected UPDATE/QUIT requirements
+
+These proofs observe wire replies, session termination and per-UID backend calls.
+Successful fixture deletes model persistence; actual storage durability, exclusive
+maildrop ownership, lock acquisition/release and resource cleanup are backend
+integration contracts outside this checked inventory. The Mailbox interface has
+no multi-message transaction or lock-release operation. On deletion failure the
+RFC permits some or none of the marked messages to be removed; these tests prove
+both outcomes without claiming atomicity, rollback or a deletion order.
+AUTHORIZATION QUIT remains covered by POP3-AUTH-04 above.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-UPDATE-01 | RFC 1939 §§3, 6 | Normative | QUIT takes no arguments; reject an argument without committing or leaving TRANSACTION. | TestUpdateQuit |
+| POP3-UPDATE-02 | RFC 1939 §6 | Normative | TRANSACTION QUIT removes marked messages on success; never remove unmarked messages, including on failure or after RSET. | TestUpdateQuit, TestUpdateResetQuit, TestUpdateDeleteFailure |
+| POP3-UPDATE-03 | RFC 1939 §6 | Normative | Reply to QUIT with the update status and close the connection after success or failure. | TestUpdateQuit, TestUpdateResetQuit, TestUpdateDeleteFailure |
+| POP3-UPDATE-04 | RFC 1939 §6 | Normative | Report successful removal with a positive QUIT reply. | TestUpdateQuit |
+| POP3-UPDATE-05 | RFC 1939 §6 | MUST NOT | Remove messages when a session ends without client-issued QUIT (tested with EOF and an incomplete command). | TestUpdateDisconnect |
+| POP3-UPDATE-06 | RFC 1939 §6 | Normative | Report removal failure negatively; some or none of the marked messages may have been removed. | TestUpdateDeleteFailure |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
@@ -70,7 +90,8 @@ missing mappings, unknown IDs and duplicate IDs must fail.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the complete AUTHORIZATION inventory (notably strict immediate-PASS
-sequencing and mailbox locking/backend contracts), UPDATE/QUIT, optional TOP/UIDL,
+sequencing and mailbox locking/backend contracts), remaining UPDATE integration
+contracts, optional TOP/UIDL,
 TLS/STLS, remaining extension requirements and CAPA configuration variations,
 RFC 2449 command-length bounds, complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
