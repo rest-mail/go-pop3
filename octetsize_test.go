@@ -1,9 +1,11 @@
 package pop3
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These tests pin the RFC 1939 §11 octet-count contract: the size STAT and LIST
@@ -152,5 +154,111 @@ func TestNaiveStoredSizeUnderReports(t *testing.T) {
 	}
 	if adv == naive {
 		t.Fatalf("RETR advertised the naive size %d; expected the canonical %d", naive, correct)
+	}
+}
+
+// octetCases are stored messages whose advertised size and decoded RETR length
+// have to agree: each end-of-line convention, a missing final end-of-line, bare
+// CR, dot-leading and dot-only lines, and binary and non-ASCII bytes. decoded is
+// the message an RFC 1939 client gets back, written out by hand: every
+// end-of-line is CRLF, and a last line stored without one ends in CRLF.
+var octetCases = []struct{ name, raw, decoded string }{
+	{"empty", "", ""},
+	{"crlf", "Subject: a\r\n\r\nbody\r\n", "Subject: a\r\n\r\nbody\r\n"},
+	{"unterminated", "Subject: a\r\n\r\nbody", "Subject: a\r\n\r\nbody\r\n"},
+	{"unterminated header only", "Subject: a", "Subject: a\r\n"},
+	{"lf only", "Subject: a\n\nbody\n", "Subject: a\r\n\r\nbody\r\n"},
+	{"lf unterminated", "Subject: a\n\nbody", "Subject: a\r\n\r\nbody\r\n"},
+	{"mixed", "Subject: a\r\n\nline\nend\r\n", "Subject: a\r\n\r\nline\r\nend\r\n"},
+	{"bare cr inside", "Subject: a\r\n\r\nx\ry\r\n", "Subject: a\r\n\r\nx\ry\r\n"},
+	{"bare cr at end", "Subject: a\r\n\r\nend\r", "Subject: a\r\n\r\nend\r\r\n"},
+	{"lone cr", "\r", "\r\r\n"},
+	{"dot lines", "Subject: a\r\n\r\n.\r\n..\r\n.x\r\n", "Subject: a\r\n\r\n.\r\n..\r\n.x\r\n"},
+	{"dot only unterminated", ".", ".\r\n"},
+	{"dot after lf", "a\n.\nb", "a\r\n.\r\nb\r\n"},
+	{"binary", "Subject: a\r\n\r\n\x00\x01\xff\xfe\r\n", "Subject: a\r\n\r\n\x00\x01\xff\xfe\r\n"},
+	{"non-ascii unterminated", "Subject: caf\xc3\xa9\r\n\r\nna\xc3\xafve \xe2\x9c\x93", "Subject: caf\xc3\xa9\r\n\r\nna\xc3\xafve \xe2\x9c\x93\r\n"},
+}
+
+// decodeRetr reads one RETR body off the wire as an RFC 1939 §3 client does,
+// without the harness's line helpers: every wire line must end in CRLF, the
+// line "." ends the body, and one leading "." is removed from any other line.
+// It returns the message octets the client ends up with.
+func decodeRetr(t *testing.T, h *pop3Harness) string {
+	t.Helper()
+	var msg strings.Builder
+	for {
+		_ = h.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		line, err := h.cr.ReadString('\n')
+		if err != nil {
+			t.Fatalf("RETR body: %v after %q", err, msg.String())
+		}
+		body, ok := strings.CutSuffix(line, "\r\n")
+		if !ok || strings.Contains(body, "\n") {
+			t.Fatalf("RETR body: wire line %q does not end in CRLF", line)
+		}
+		if body == "." {
+			return msg.String()
+		}
+		msg.WriteString(strings.TrimPrefix(body, "."))
+		msg.WriteString("\r\n")
+	}
+}
+
+// TestAdvertisedOctetsMatchDecodedRetr checks RFC 1939 §5 and §11 over a real
+// session: for every stored message sized with OctetCount, RETR decodes to the
+// expected message; LIST n, the LIST scan listing and RETR's "+OK n octets" all
+// equal the octets the client decoded; STAT's total is their sum; and the
+// command after each RETR gets its own reply (the body and terminator were
+// exactly where the client looked).
+// Byte-stuffed dots and the terminating ".\r\n" are not counted.
+func TestAdvertisedOctetsMatchDecodedRetr(t *testing.T) {
+	m := newMockBackend()
+	for i, c := range octetCases {
+		uid := fmt.Sprintf("u%d", i+1)
+		m.seed(uid, OctetCount([]byte(c.raw)), c.raw)
+		m.mbox.raws[uid] = []byte(c.raw) // seed skips "", an empty message is still one
+	}
+	h := newPOP3Harness(t, m)
+	h.login()
+
+	decoded := make([]string, len(octetCases))
+	total := 0
+	for i, c := range octetCases {
+		n := i + 1
+		status := h.cmd("RETR %d", n)
+		decoded[i] = decodeRetr(t, h)
+		total += len(decoded[i])
+		if decoded[i] != c.decoded {
+			t.Errorf("%s: RETR decoded to %q, want %q", c.name, decoded[i], c.decoded)
+		}
+		if want := fmt.Sprintf("+OK %d octets", len(decoded[i])); status != want {
+			t.Errorf("%s: RETR status %q, client decoded %d octets %q", c.name, status, len(decoded[i]), decoded[i])
+		}
+		if r := h.cmd("NOOP"); r != "+OK" {
+			t.Fatalf("%s: NOOP after RETR got %q, the RETR framing is off", c.name, r)
+		}
+		if want := fmt.Sprintf("+OK %d %d", n, len(decoded[i])); h.cmd("LIST %d", n) != want {
+			t.Errorf("%s: LIST %d disagrees with RETR, want %q", c.name, n, want)
+		}
+	}
+
+	if want := fmt.Sprintf("+OK %d %d", len(octetCases), total); h.cmd("STAT") != want {
+		t.Errorf("STAT disagrees with the RETR total, want %q", want)
+	}
+	if r := h.cmd("LIST"); !strings.HasPrefix(r, "+OK") {
+		t.Fatalf("LIST status = %q", r)
+	}
+	scan := h.readDotBody()
+	if len(scan) != len(octetCases) {
+		t.Fatalf("LIST listed %d messages, want %d", len(scan), len(octetCases))
+	}
+	for i, l := range scan {
+		if want := fmt.Sprintf("%d %d", i+1, len(decoded[i])); l != want {
+			t.Errorf("%s: LIST line %q, want %q", octetCases[i].name, l, want)
+		}
+	}
+	if r := h.cmd("NOOP"); r != "+OK" {
+		t.Fatalf("NOOP after LIST got %q", r)
 	}
 }

@@ -482,8 +482,9 @@ func (s *Session) handleRetr(arg string) {
 	}
 	// Canonicalize line endings to CRLF first: a bare LF in stored content must
 	// not survive inside a line, or it would evade dot-stuffing and could forge
-	// the "." terminator. Octets are counted on this canonical wire form.
-	raw := canonicalCRLF(string(rawBytes))
+	// the "." terminator. An unterminated last line gets its CRLF here too, so
+	// octets are counted on exactly the message the client decodes.
+	raw := wireMessage(string(rawBytes))
 
 	// The advertised count is the RFC 1939 §11 octet count of the message on the
 	// canonical CRLF form: len(raw) == OctetCount(rawBytes). This is the exact

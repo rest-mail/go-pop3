@@ -18,6 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (U+017F) logged in as `PASS`, `lıst` (U+0131) ran `LIST`, and invalid UTF-8 in a
   keyword became U+FFFD. Only `a`-`z` are upper-cased now, so such a keyword is an
   unknown command.
+- **Sizes of a message stored without a final end-of-line.** `RETR` ends the last
+  line with CRLF, as every line of a multi-line response must, but `OctetCount`
+  did not count that CRLF. `STAT`, `LIST` and the `RETR` "+OK n octets" reply
+  were 2 octets short of the message a client decoded. `OctetCount` and `RETR`
+  now count it (RFC 1939 §11). Messages that already end in an end-of-line, and
+  empty messages, keep their size. A backend that stores `Message.Size` it
+  computed earlier with `OctetCount` should recompute it for such messages
+  (part of rest-mail-server#374).
 
 ### Added
 

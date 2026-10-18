@@ -99,14 +99,17 @@ type Message struct {
 // endings are normalized to CRLF exactly as RETR does before transmission (a lone
 // LF or a lone CR-then-LF becomes CR LF, so an end-of-line stored as a single
 // character counts as two octets, per §11), while a bare CR that is not a line
-// terminator is left unchanged. The §3 byte-stuffing of leading-dot lines and the
-// CRLF.CRLF terminator are transport framing and are deliberately excluded, so
-// the result matches the "+OK <n> octets" count RETR advertises.
+// terminator is left unchanged. A message whose last line has no end-of-line
+// counts the CRLF RETR ends that line with (every line of a §3 multi-line
+// response ends in CRLF); an empty message counts 0. The §3 byte-stuffing of
+// leading-dot lines and the CRLF.CRLF terminator are transport framing and are
+// deliberately excluded, so the result matches the "+OK <n> octets" count RETR
+// advertises and the length of the message a client decodes.
 //
 // A [Backend] computes [Message.Size] with OctetCount over the same bytes
 // [Mailbox.Retrieve] returns so that STAT and LIST agree with RETR to the octet.
 func OctetCount(raw []byte) int {
-	return len(canonicalCRLF(string(raw)))
+	return len(wireMessage(string(raw)))
 }
 
 // Backend authenticates POP3 users. A [Server] calls Authenticate once per
