@@ -41,7 +41,7 @@ type wire struct {
 	reader *bufio.Reader
 }
 
-func connect(t *testing.T, b backend) *wire {
+func connect(t *testing.T, b pop3.Backend) *wire {
 	t.Helper()
 	client, server := net.Pipe()
 	done := make(chan struct{})
