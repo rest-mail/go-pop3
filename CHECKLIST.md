@@ -197,6 +197,27 @@ library-policy rows; it does not make the policy an RFC requirement.
 | POP3-LENGTH-POLICY-01 | Library policy (session.go bounded reader) | Normative | Accept complete 1024-byte USER/PASS lines including LF, preserving credential bytes; count UTF-8 bytes rather than runes. | TestCommandLengthPolicy1024Accepted |
 | POP3-LENGTH-POLICY-02 | Library policy (session.go bounded reader) | Normative | Refuse a 1024-byte buffer without LF with one error then close; do not authenticate or resynchronize a 1025-byte complete line or queued command. | TestCommandLengthPolicyOverflowCloses |
 
+## RFC 1939 §3: selected unknown and unimplemented command refusals
+
+These sequential public Session/net.Pipe proofs exercise two unknown keywords
+and currently unimplemented optional APOP/AUTH commands (including mixed case)
+in AUTHORIZATION, both at greeting and after USER, and in TRANSACTION after DELE.
+Exact -ERR replies and the shared wire reader check uppercase status and CRLF;
+following CAPA, STAT and NOOP responses check framing and retained session state.
+The error prose and unchanged-state POLICY row record current library behavior,
+not additional RFC mandates. Backend counters cover authentication, enumeration,
+retrieval, mark-seen and deletion; QUIT/RSET controls observe the same marked UID
+or no deletion after reset. Fixtures use only memory, nil TLS and the no-op limiter.
+This is not an APOP/SASL implementation, authentication-error classification,
+exhaustive command grammar/state inventory or new PIPELINING proof. Existing
+argument/state and queued unknown-command proofs remain in their sections above.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-COMMAND-01 | RFC 1939 §3 | MUST | Reply to selected unrecognized commands with uppercase -ERR and CRLF in AUTHORIZATION and TRANSACTION. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
+| POP3-COMMAND-02 | RFC 1939 §3 | MUST | Reply to currently unimplemented optional APOP/AUTH commands with uppercase -ERR and CRLF in AUTHORIZATION and TRANSACTION. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
+| POP3-COMMAND-POLICY-01 | Library policy (session.go default dispatch) | Normative | Refusal keeps the session usable without authentication or backend read/delete side effects, preserving existing deletion marks until explicit RSET or QUIT. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
+
 ## Validation and boundaries
 
 Run `go run ./internal/checklist internal/rfctest` from the module root. The
