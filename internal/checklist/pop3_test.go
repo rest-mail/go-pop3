@@ -33,6 +33,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	sessionVector := read("internal/rfctest/session_vector_test.go")
 	uidSessions := read("internal/rfctest/uidl_sessions_test.go")
 	passImmediate := read("internal/rfctest/pass_immediate_test.go")
+	idle := read("internal/rfctest/idle_test.go")
 	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, want string }{
 		{"valid", checklist, tests, authPipelining, sessionVector, ""},
 		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
@@ -74,6 +75,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "session_vector_test.go"):  tc.sessionVector,
 				filepath.Join(dir, "uidl_sessions_test.go"):   uidSessions,
 				filepath.Join(dir, "pass_immediate_test.go"):  passImmediate,
+				filepath.Join(dir, "idle_test.go"):            idle,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
@@ -82,7 +84,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "70 items (70 mapped to tests, 0 not applicable), 46 tests") {
+				if code != 0 || !strings.Contains(out.String(), "73 items (73 mapped to tests, 0 not applicable), 48 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -104,8 +106,9 @@ func removeSessionVectorRow(checklist string) string {
 	return strings.Join(lines, "\n")
 }
 
-// Each new UIDL-session and immediate-PASS proof must remain connected in both
-// directions. These checker-input mutations never execute or alter wire tests.
+// Each new UIDL-session, immediate-PASS and autologout proof must remain
+// connected in both directions. These checker-input mutations never execute or
+// alter wire tests.
 func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 	checklist, err := os.ReadFile(filepath.Join("..", "..", "CHECKLIST.md"))
 	if err != nil {
@@ -127,6 +130,8 @@ func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 		{"POP3-UIDL-05", "TestUIDLSequentialSessionsDeleteAndAppend", "uidl_sessions_test.go"},
 		{"POP3-UIDL-06", "TestUIDLSequentialSessionsWithoutUpdate", "uidl_sessions_test.go"},
 		{"POP3-PASS-05", "TestPassRequiresImmediateUser", "pass_immediate_test.go"},
+		{"POP3-IDLE-01", "TestIdleDeadlineReset", "idle_test.go"},
+		{"POP3-IDLE-03", "TestIdleAutologoutWithoutUpdate", "idle_test.go"},
 	} {
 		var row string
 		for _, line := range strings.Split(string(checklist), "\n") {
