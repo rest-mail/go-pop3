@@ -40,8 +40,18 @@ jobs:
       - name: Validate partial RFC checklist
         run: go run ./internal/checklist internal/rfctest
 
-      - name: Run tests with race detector
-        run: go test -race -count=1 ./...
+      # The RFC proofs in internal/rfctest drive the library from outside the
+      # package, so coverage is counted across every package (-coverpkg). CI
+      # fails below 95%; COVERAGE.md lists what is left uncovered and why.
+      - name: Run tests with race detector and coverage
+        run: go test -race -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - name: Require at least 95% statement coverage
+        run: |
+          set -euo pipefail
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/, "", $3); print $3}')
+          echo "Statement coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit !(t + 0 >= 95) }'
 
   fuzz:
     name: Fuzz (5s per target)

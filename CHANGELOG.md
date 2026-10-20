@@ -42,6 +42,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   its log redaction, the UIDL unique-id, `canonicalCRLF`, `OctetCount`, and the
   `RETR`/`TOP` framing. Each checks an RFC 1939 property against an independent
   model, and CI fuzzes every target for 5 seconds (part of rest-mail-server#374).
+- **A coverage gate.** CI counts statement coverage across every package and
+  fails below 95% (97.4% now); `COVERAGE.md` lists what is left uncovered and
+  why. New tests cover a message the store cannot retrieve (`RETR` and `TOP`
+  answer `-ERR`), a failed `PASS` that bans the client, a connection the limiter
+  refuses at accept time, an empty command line, and `NopLimiter` (part of
+  rest-mail-server#374).
 
 ## [0.2.0] - 2026-07-25
 
