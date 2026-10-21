@@ -13,7 +13,8 @@ import (
 	pop3 "github.com/rest-mail/go-pop3"
 )
 
-// These fixtures use only memory and net.Pipe; they never open a database or port.
+// These fixtures use only memory and net.Pipe; they never open a database or
+// port. The implicit-TLS proofs are the one exception: see implicit_tls_test.go.
 type backend struct {
 	password string
 	loadErr  error

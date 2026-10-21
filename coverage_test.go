@@ -2,7 +2,9 @@ package pop3
 
 import (
 	"bufio"
+	"crypto/tls"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +12,8 @@ import (
 
 // The tests in this file cover failure paths the transcript tests do not reach:
 // a store that cannot return a message, a client banned by its failed PASS, a
-// connection the limiter refuses at accept time, and the no-op limiter itself.
+// connection the limiter refuses at accept time, a port already in use, and the
+// no-op limiter itself.
 
 // A message the store cannot retrieve is answered -ERR by RETR and TOP, and the
 // session carries on.
@@ -112,6 +115,35 @@ func TestPOP3_LimiterRefusesAtAccept(t *testing.T) {
 	n, readErr := conn.Read(buf)
 	if readErr == nil {
 		t.Fatalf("refused connection got %q, want it closed", buf[:n])
+	}
+}
+
+// A port that is already bound makes ListenAndServe fail and name the port,
+// for both the plaintext and the implicit-TLS listener.
+func TestListenAndServePortInUse(t *testing.T) {
+	held, err := net.Listen("tcp", ":0") // every interface, like ListenAndServe
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = held.Close() })
+	port := held.Addr().(*net.TCPAddr).Port
+
+	tlsConfig := &tls.Config{GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return nil, nil
+	}}
+	for name, ports := range map[string]Ports{
+		"POP3":    {POP3: port},
+		"POP3TLS": {POP3TLS: port},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := NewServer(newMockBackend(), tlsConfig, nil)
+			t.Cleanup(func() { _ = srv.Close() })
+			err := srv.ListenAndServe(ports)
+			want := "failed to listen on port " + strconv.Itoa(port)
+			if err == nil || !strings.HasPrefix(err.Error(), want) {
+				t.Fatalf("ListenAndServe on a bound port = %v, want %q...", err, want)
+			}
+		})
 	}
 }
 
