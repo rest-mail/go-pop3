@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   response line, including the greeting, stays within 512 octets for
   maximum-length commands in both states.
 
+- `LoginDelayBackend` and `LoginDelayMailbox` announce the RFC 2449 §6.5
+  `LOGIN-DELAY` CAPA tag: the Backend's minimum in AUTHORIZATION (followed by
+  `USER` when the delay varies per user) and the user's own value in
+  TRANSACTION. Backends without them are unchanged. Checked by POP3-CAPA-05.
+
 - RFC 6856 `UTF8` support through the optional `UTF8Backend` interface: CAPA
   advertises `UTF8`, the `UTF8` command is accepted in AUTHORIZATION state
   (refused after login, reset by STLS), and `AuthenticateUTF8` receives the
