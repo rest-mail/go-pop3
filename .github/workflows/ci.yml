@@ -23,6 +23,16 @@ jobs:
           go-version: "1.25.10"
           cache: true
 
+      - name: Set up independent POP3 reference client
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Compare with CPython poplib
+        env:
+          POP3_REFERENCE_PYTHON: python
+        run: go test -race -count=1 -timeout=90s -run '^TestPythonPoplibReference$' ./internal/referencetest
+
       - name: Build
         run: go build ./...
 
