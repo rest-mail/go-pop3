@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- CAPA advertises `AUTH-RESP-CODE` (RFC 3206 §6), and the PASS failure that
+  earns a limiter ban now replies `-ERR [AUTH] Too many authentication failures`,
+  so every credential-caused failure carries the AUTH response code. Checked
+  by POP3-RESP-CODES-03.
+
 - Checked RFC 1939 §3 autologout proof after STLS: the encrypted idle
   interval is renewed to at least ten minutes, and a genuine timeout below TLS
   after the handshake, an encrypted USER or two DELE marks closes with only

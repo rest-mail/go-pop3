@@ -209,7 +209,7 @@ session goroutines. They use nil TLS and the no-op limiter. RFC 2449 §6.6 gives
 USER/PASS batching as an example; reset/retry details above record existing
 library policy, not an additional RFC mandate or strict immediate-PASS claim.
 
-## RFC 2449 §§3, 6.4, 8 and RFC 3206 §5: selected RESP-CODES/AUTH behavior
+## RFC 2449 §§3, 6.4, 8 and RFC 3206 §§5–6: selected RESP-CODES/AUTH behavior
 
 RFC 2449 §8 permits optional bracketed response codes; advertising RESP-CODES
 does not require a code on every -ERR. RFC 3206 §5 defines AUTH for credential
@@ -224,11 +224,15 @@ failed PASS, and plain maildrop-load errors without credential AUTH labeling or
 backend detail disclosure. Fixtures use memory, nil TLS and the default no-op
 limiter; backend Authenticate errors are treated as credential rejection here,
 not a proof that the interface classifies arbitrary backend failures correctly.
+RFC 3206 §6 says a server that labels credential failures with AUTH SHOULD
+advertise AUTH-RESP-CODE. The library now does: the PASS failure that earns a
+limiter ban is credential-caused, so its reply carries AUTH as well.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | POP3-RESP-CODES-01 | RFC 2449 §§6.4, 8 | Normative | Announce parameterless RESP-CODES in AUTHORIZATION and TRANSACTION for extended response-code support. | TestResponseCodeCapabilities |
 | POP3-RESP-CODES-02 | RFC 2449 §§3, 8; RFC 3206 §5 | Normative | On coded wrong-password and unknown-account PASS failures, AUTH denotes credential trouble and begins response text in brackets after the status space, with CRLF framing. | TestResponseCodeCredentialFailures |
+| POP3-RESP-CODES-03 | RFC 3206 §6 | SHOULD | Every credential-caused PASS failure carries AUTH (wrong password, unknown account, and the failure that earns a limiter ban), so CAPA lists parameterless AUTH-RESP-CODE exactly once in AUTHORIZATION and TRANSACTION. | TestResponseCodeAuthRespCodeCapability |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
 | POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
 | POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with plain -ERR without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
@@ -363,8 +367,8 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **81 mapped rows / 55 named wire tests**
-(previous 80/54 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **82 mapped rows / 56 named wire tests**
+(previous 81/55 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
@@ -456,9 +460,8 @@ crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
-hierarchical/unknown-code client handling, LOGIN-DELAY, IN-USE and SYS), RFC 3206 §§5–6's SHOULD to
-advertise AUTH-RESP-CODE (currently absent) and its full credential-error
-contract, other extension requirements and CAPA configuration variations,
+hierarchical/unknown-code client handling, LOGIN-DELAY, IN-USE and SYS), the full RFC 3206 credential-error
+contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
 complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and

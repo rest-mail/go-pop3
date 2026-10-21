@@ -62,7 +62,7 @@ func commandErrorCapa(t *testing.T, w *wire) {
 	expect(t, w.cmd("CAPA"), "+OK Capability list follows")
 	// Pin the existing nil-TLS list and its terminator as a framing probe.
 	// This adds no capability or new authentication classification.
-	for _, line := range []string{"USER", "TOP", "UIDL", "RESP-CODES", "PIPELINING", "."} {
+	for _, line := range []string{"USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", "."} {
 		expect(t, w.line(), line)
 	}
 }

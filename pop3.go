@@ -39,7 +39,8 @@
 // TLS config is present the engine refuses USER on a plaintext connection, so
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
-// UIDL, RESP-CODES and PIPELINING.
+// UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING. Every PASS failure
+// caused by the credentials carries the [AUTH] response code.
 //
 // # Rate limiting
 //

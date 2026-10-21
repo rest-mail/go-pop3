@@ -91,7 +91,7 @@ func stlsConnect(t *testing.T, config *tls.Config) (*wire, *stlsBackend) {
 func stlsCapabilities(t *testing.T, w *wire, wantSTLS bool) {
 	t.Helper()
 	w.status(w.cmd("CAPA"), "+OK")
-	want := map[string]bool{"USER": true, "TOP": true, "UIDL": true, "RESP-CODES": true, "PIPELINING": true}
+	want := map[string]bool{"USER": true, "TOP": true, "UIDL": true, "RESP-CODES": true, "AUTH-RESP-CODE": true, "PIPELINING": true}
 	if wantSTLS {
 		want["STLS"] = true
 	}

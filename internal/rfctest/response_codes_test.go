@@ -1,9 +1,14 @@
 package rfctest
 
 import (
+	"bufio"
 	"errors"
+	"net"
 	"strings"
 	"testing"
+	"time"
+
+	pop3 "github.com/rest-mail/go-pop3"
 )
 
 // checklist: POP3-RESP-CODES-01
@@ -82,4 +87,72 @@ func TestResponseCodeMaildropFailure(t *testing.T) {
 		expect(t, w.cmd("STAT"), "-ERR Not authenticated")
 	}
 	expect(t, w.cmd("QUIT"), "+OK POP3 server signing off")
+}
+
+// authRespBanLimiter bans an address once a set number of credential failures
+// has been recorded for it.
+type authRespBanLimiter struct {
+	pop3.NopLimiter
+	limit, fails int
+}
+
+func (l *authRespBanLimiter) RecordAuthFail(string) { l.fails++ }
+func (l *authRespBanLimiter) IsBanned(string) bool  { return l.fails >= l.limit }
+
+// RFC 3206 §6: a server that labels every credential-caused authentication
+// failure with AUTH SHOULD list AUTH-RESP-CODE in CAPA. The cases cover each
+// credential failure this library reports: a wrong password, an unknown
+// account, and the failure that earns a limiter ban and closes the session.
+// checklist: POP3-RESP-CODES-03
+func TestResponseCodeAuthRespCodeCapability(t *testing.T) {
+	w := connect(t, backend{password: "secret"})
+	for _, authenticated := range []bool{false, true} {
+		if authenticated {
+			w.login("secret")
+		}
+		w.status(w.cmd("CAPA"), "+OK")
+		count := 0
+		for i := 0; ; i++ {
+			if i > 32 {
+				t.Fatal("CAPA missing terminator")
+			}
+			line := w.line()
+			if line == "." {
+				break
+			}
+			tag, _, _ := strings.Cut(line, " ")
+			if strings.EqualFold(tag, "AUTH-RESP-CODE") {
+				// The capability takes no parameters.
+				expect(t, line, "AUTH-RESP-CODE")
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("CAPA authenticated=%t: AUTH-RESP-CODE count = %d, want 1", authenticated, count)
+		}
+	}
+
+	for _, credentials := range [][2]string{{"alice", "wrong"}, {"unknown", "secret"}} {
+		t.Run("ban/"+credentials[0], func(t *testing.T) {
+			client, server := net.Pipe()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				pop3.NewSession(server, backend{password: "secret"}, nil, &authRespBanLimiter{limit: 2}).Handle()
+			}()
+			t.Cleanup(func() { _ = client.Close() })
+			w := &wire{t: t, conn: client, reader: bufio.NewReader(client), done: done}
+			w.status(w.line(), "+OK")
+			expect(t, w.cmd("USER "+credentials[0]), "+OK")
+			expect(t, w.cmd("PASS "+credentials[1]), "-ERR [AUTH] Authentication failed")
+			expect(t, w.cmd("USER "+credentials[0]), "+OK")
+			// The ban follows a credential failure, so it carries AUTH too.
+			expect(t, w.cmd("PASS "+credentials[1]), "-ERR [AUTH] Too many authentication failures")
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("session still open after the ban")
+			}
+		})
+	}
 }

@@ -37,7 +37,8 @@ so what the client downloads is exactly what you stored.
   any other line, such as ` PASS x`, `PASS<TAB>x`, a lookalike like `paſs x` or a
   password typed on its own, is logged only as `<unknown command redacted>`.
 - `CAPA` capability advertisement ([RFC 2449](https://www.rfc-editor.org/rfc/rfc2449)):
-  `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `PIPELINING`.
+  `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
+  ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`.
 - Storage-agnostic `Backend`/`Mailbox` seam — mail can live anywhere.
 - Deferred deletes with correct RFC 1939 update state: `DELE` marks, `QUIT`
   commits, `RSET` unmarks.
