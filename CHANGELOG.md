@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `LoginDelayBackend` and `LoginDelayMailbox` announce the RFC 2449 §6.5
+  `LOGIN-DELAY` CAPA tag: the Backend's minimum in AUTHORIZATION (followed by
+  `USER` when the delay varies per user) and the user's own value in
+  TRANSACTION. Backends without them are unchanged. Checked by POP3-CAPA-05.
 - `ErrSystemTemporary` and `ErrSystemPermanent` let `Authenticate` and `Messages`
   classify login failures as `SYS/TEMP` or `SYS/PERM` (RFC 3206 §4), including
   wrapped errors. Authentication system failures preserve credential-failure
