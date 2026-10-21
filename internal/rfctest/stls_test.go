@@ -116,6 +116,13 @@ func stlsCapabilities(t *testing.T, w *wire, wantSTLS bool) {
 func stlsUpgrade(t *testing.T, w *wire, config *tls.Config) {
 	t.Helper()
 	w.status(w.cmd("STLS"), "+OK")
+	stlsHandshake(t, w, config)
+}
+
+// stlsHandshake negotiates TLS after the client has read the positive STLS
+// reply, and replaces the wire's plaintext endpoints with the encrypted ones.
+func stlsHandshake(t *testing.T, w *wire, config *tls.Config) {
+	t.Helper()
 	if w.reader.Buffered() != 0 {
 		t.Fatal("unexpected plaintext bytes after STLS response")
 	}
@@ -228,5 +235,33 @@ func TestSTLSHandshakeFailure(t *testing.T) {
 	waitStopped(t, w)
 	if got := b.calls.Load(); got != 0 {
 		t.Fatalf("failed-handshake authentication calls = %d, want 0", got)
+	}
+}
+
+// checklist: POP3-STLS-07
+func TestSTLSDiscardsPipelinedPlaintext(t *testing.T) {
+	server, client := stlsConfigs(t)
+	w, b := stlsConnect(t, server)
+	// One plaintext write puts commands behind STLS in the server's read
+	// buffer before the handshake: the STARTTLS command-injection shape
+	// (CVE-2011-0411). None may run as if the client had sent it under TLS.
+	_ = w.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(w.conn, "STLS\r\nUSER alice\r\nPASS secret\r\nNOOP\r\n"); err != nil {
+		t.Fatalf("send pipelined STLS: %v", err)
+	}
+	w.status(w.line(), "+OK")
+	stlsHandshake(t, w, client)
+	// The first encrypted reply answers the first encrypted command; no
+	// injected NOOP reply precedes it and no injected USER/PASS authenticated.
+	w.status(w.cmd("STAT"), "-ERR")
+	w.status(w.cmd("PASS secret"), "-ERR") // The injected USER was not kept.
+	if got := b.calls.Load(); got != 0 {
+		t.Fatalf("authentication calls from injected plaintext = %d, want 0", got)
+	}
+	stlsCapabilities(t, w, false)
+	w.login("secret")
+	expect(t, w.cmd("STAT"), "+OK 1 42")
+	if got := b.calls.Load(); got != 1 {
+		t.Fatalf("encrypted authentication calls = %d, want 1", got)
 	}
 }

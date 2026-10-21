@@ -128,7 +128,12 @@ goroutines. TLS 1.3 is the test fixture's choice, not a claimed RFC 2595 mandate
 Re-issued encrypted CAPA verifies the transition, not client cache management.
 The two POLICY rows describe existing library choices: configuring TLS refuses
 plaintext USER/PASS, and a failed handshake closes the session. They are not
-universal RFC mandates. Nil TLS configuration permits plaintext authentication.
+universal RFC mandates. POP3-STLS-07 is also library policy: RFC 2595 does not
+spell out buffered-input handling, but the STARTTLS command-injection class
+(CVE-2011-0411) is avoided by never reading plaintext octets past the STLS line
+under TLS. A temporary control that carried the buffered octets into the TLS
+reader (session.go restored byte-for-byte) authenticated the injected USER/PASS
+and failed the test. Nil TLS configuration permits plaintext authentication.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -138,6 +143,7 @@ universal RFC mandates. Nil TLS configuration permits plaintext authentication.
 | POP3-STLS-04 | RFC 2595 §4 | Normative | Remain in AUTHORIZATION after STLS; do not grant transaction access until USER/PASS succeeds. | TestSTLSCredentials |
 | POP3-STLS-05 | RFC 2595 §4; RFC 2449 §5 | Normative | Re-issued CAPA after TLS omits STLS and retains USER; preserve that encrypted capability list after authentication. | TestSTLSCredentials |
 | POP3-STLS-06 | RFC 2595 §4 | Normative | Permit STLS only in AUTHORIZATION; refuse it in TRANSACTION and exercise the permitted refusal when TLS is already active. | TestSTLSStates |
+| POP3-STLS-07 | RFC 2595 §4; RFC 2449 §6.6 (library policy) | Normative | Plaintext commands pipelined after STLS in the same read are discarded at the handshake: no injected USER/PASS authenticates or is retained, and no injected command is answered under TLS. | TestSTLSDiscardsPipelinedPlaintext |
 | POP3-TLS-POLICY-01 | RFC 2595 §§2.5, 4 (library policy) | Normative | With TLS configured, refuse plaintext USER/PASS without calling backend authentication; accept valid credentials through TLS exactly once. | TestSTLSCredentials |
 | POP3-TLS-POLICY-02 | RFC 2595 §2.5 (library policy) | Normative | Close after a malformed TLS record header during STLS negotiation without calling backend authentication. | TestSTLSHandshakeFailure |
 
@@ -367,8 +373,8 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **82 mapped rows / 56 named wire tests**
-(previous 81/55 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **83 mapped rows / 57 named wire tests**
+(previous 82/56 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
