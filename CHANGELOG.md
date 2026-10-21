@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Nine RFC 2449/2595 checklist rows: TOP/UIDL capability contracts, combined
+  CAPA configuration grammar, optional extended codes, and STLS with a verified
+  client certificate are backed by five new public-Session wire tests. Four
+  explicit n/a reasons cover unsupported SASL/IMPLEMENTATION, unavailable host
+  retention policy and client capability-cache duties. The partial README badge
+  includes these gaps in its denominator (95/99 mapped).
+
 - README coverage-gate and partial RFC checklist badges, checked by tests
   against the CI coverage minimum and the checklist's actual test mappings.
 - POP3-LENGTH-02 (`TestResponseFirstLineLimit`) proves RFC 2449 §4: the first
