@@ -308,3 +308,57 @@ func TestIdlePreLoginTimeout(t *testing.T) {
 		})
 	}
 }
+
+// checklist: POP3-IDLE-06
+func TestIdlePreLoginPartialCommandTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		name, complete, partial string
+	}{
+		{"user-without-terminator", "", "USER alice"},
+		{"user-with-cr-without-lf", "", "USER alice\r"},
+		{"pass-without-terminator", "USER alice", "PASS secret"},
+		{"pass-with-cr-without-lf", "USER alice", "PASS secret\r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &authCountingBackend{}
+			w := idleConnect(t, b)
+			w.awaitRead()
+			if tc.complete != "" {
+				w.exchange(tc.complete, "+OK")
+			}
+			// net.Pipe Write completes only after Read takes the bytes. The next
+			// Read entry then proves ReadSlice buffered the incomplete command
+			// and is waiting for its LF, rather than dispatching credentials.
+			_ = w.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if n, err := io.WriteString(w.conn, tc.partial); err != nil || n != len(tc.partial) {
+				t.Fatalf("send partial command: %d bytes, %v", n, err)
+			}
+			w.awaitRead()
+			if n := b.authenticated.Load(); n != 0 {
+				t.Fatalf("Authenticate called before timeout: %d", n)
+			}
+			// Force a genuine read timeout after buffering, without waiting ten
+			// minutes or closing the pipe to manufacture EOF.
+			if err := w.pipe.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			_ = w.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if b, err := w.reader.ReadByte(); !errors.Is(err, io.EOF) {
+				t.Fatalf("after timeout: byte %q, err %v, want EOF without a response", b, err)
+			}
+			waitStopped(t, w.wire)
+			w.server.mu.Lock()
+			readErr := w.server.readErr
+			w.server.mu.Unlock()
+			var netErr net.Error
+			if !errors.Is(readErr, os.ErrDeadlineExceeded) || !errors.As(readErr, &netErr) || !netErr.Timeout() {
+				t.Fatalf("session read ended with %v, want a deadline timeout", readErr)
+			}
+			// Authenticate is the only mailbox entry point. Even the buffered
+			// PASS after an accepted USER must never reach it on read failure.
+			if n := b.authenticated.Load(); n != 0 {
+				t.Fatalf("Authenticate called after timeout: %d", n)
+			}
+		})
+	}
+}
