@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A CI-required comparison with Python 3.13's independent `poplib` client for
+  selected plaintext POP3 commands, decoded message bytes/octet counts and
+  QUIT versus disconnect deletion behavior. Python remains test-only and is
+  optional for ordinary local Go test runs; see README for scope and usage.
+
 ### Fixed
 
 - **`TOP` of a message with an empty header section.** A message that begins with

@@ -160,6 +160,36 @@ satisfies it.
 Full API reference:
 [pkg.go.dev/github.com/rest-mail/go-pop3](https://pkg.go.dev/github.com/rest-mail/go-pop3).
 
+## Independent client verification
+
+CI runs `TestPythonPoplibReference` against the Python 3.13 standard library's
+[`poplib`](https://docs.python.org/3.13/library/poplib.html) client. To run it
+locally with Python 3 installed:
+
+```sh
+POP3_REFERENCE_PYTHON=python3 go test -count=1 -run '^TestPythonPoplibReference$' ./internal/referencetest
+```
+
+The test opens an ephemeral loopback listener and drives the public `Session`
+API with a memory backend. The independent client parses CAPA, authentication
+errors, STAT, single/multiline LIST and UIDL, RETR, TOP, DELE, RSET, NOOP and
+QUIT. Its decoded messages and octet counts are compared with fixed expected
+bytes, independently of the server's framing helpers; `OctetCount` is checked
+against the same expectations. Fixtures include leading dots, empty messages,
+LF normalization, an unterminated final line and opaque byte content. Backend
+checks distinguish successful QUIT deletion from disconnect without UPDATE.
+
+This is a limited differential decoding/interoperability check against an
+independent client, not a comparison with another server or a full RFC oracle.
+`poplib` accepts some noncanonical response syntax, so the existing Go wire
+tests remain responsible for strict CRLF/status assertions. TLS/STLS,
+pipelining, arbitrary malformed inputs and production backend durability are
+outside this reference test. Python is a test-only prerequisite: ordinary Go
+tests skip this comparison unless `POP3_REFERENCE_PYTHON` is set; CI explicitly
+sets it and fails if Python or the comparison fails. No runtime dependency is
+added. The partial checked RFC inventory and remaining gaps are described in
+[CHECKLIST.md](CHECKLIST.md).
+
 ## Changelog
 
 Recent releases — see [CHANGELOG.md](CHANGELOG.md) for the complete history.
