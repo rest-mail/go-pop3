@@ -14,8 +14,8 @@ import (
 // command line (and its log redaction), the UIDL unique-id, and the RETR/TOP
 // message framing with its octet count. Each target checks a property derived
 // from RFC 1939 / RFC 2449 or from an independent formulation, never the
-// implementation compared with itself. CI runs each target for a short fixed
-// time; plain `go test` runs the seeds below as regression cases.
+// implementation compared with itself. CI gives each target a fixed execution
+// budget; plain `go test` runs the seeds below as regression cases.
 
 // maxFuzzInput caps every fuzz input so a run stays bounded in memory and time.
 const maxFuzzInput = 64 << 10

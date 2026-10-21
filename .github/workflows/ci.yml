@@ -64,7 +64,7 @@ jobs:
           awk -v t="$total" 'BEGIN { exit !(t + 0 >= 95) }'
 
   fuzz:
-    name: Fuzz (5s per target)
+    name: Fuzz (100k executions per target)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -77,8 +77,10 @@ jobs:
           go-version: "1.25.10"
           cache: true
 
-      # go test -fuzz takes one target at a time. Each runs for a fixed short
-      # budget on two workers; a failing input is written under testdata/fuzz.
+      # go test -fuzz takes one target at a time. Use an execution count to avoid
+      # Go 1.25's duration-limit cancellation race (golang/go#75804), which can
+      # fail a healthy target with "context deadline exceeded" at -fuzztime=5s.
+      # Each runs on two workers; failing inputs are written under testdata/fuzz.
       - name: Fuzz each target
         run: |
           set -euo pipefail
@@ -86,7 +88,7 @@ jobs:
           test -n "$targets"
           for target in $targets; do
             echo "::group::$target"
-            go test -run='^$' -fuzz="^${target}\$" -fuzztime=5s -parallel=2 .
+            go test -run='^$' -fuzz="^${target}\$" -fuzztime=100000x -parallel=2 .
             echo "::endgroup::"
           done
 
