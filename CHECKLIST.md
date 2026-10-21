@@ -35,7 +35,7 @@ Requirements below paraphrase the primary texts:
 | POP3-PASS-05 | RFC 1939 §7 (PASS), Appendix A | Normative | Accept PASS only immediately after a successful USER in AUTHORIZATION; intervening commands and empty PASS invalidate pending USER without backend calls, and a fresh USER/PASS pair can retry. | TestPassRequiresImmediateUser |
 | POP3-AUTH-04 | RFC 1939 §§3–4, 7 (USER) | Normative | QUIT in AUTHORIZATION replies positively and closes, including after accepted USER. | TestAuthorizationQuit |
 
-## RFC 2449: selected CAPA behavior without TLS
+## RFC 2449: selected CAPA behavior and capability inventory
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -44,6 +44,20 @@ Requirements below paraphrase the primary texts:
 | POP3-CAPA-03 | RFC 2449 §5 | MUST | Retain AUTHORIZATION capabilities in TRANSACTION (tested without TLS). | TestCapaBothStates |
 | POP3-CAPA-04 | RFC 2449 §6.2 | Normative | Announce parameterless USER in both states for USER/PASS support. | TestCapaBothStates |
 | POP3-CAPA-05 | RFC 2449 §6.5 | Normative | When the Backend opts in, announce LOGIN-DELAY with the minimum seconds between logins in both states, followed by USER only in AUTHORIZATION when the value varies per user, and the user's own value in TRANSACTION. | TestCapaLoginDelay, TestCapaLoginDelayRequiresBackend |
+| POP3-CAPA-06 | RFC 2449 §6.1 | Normative | Announce parameterless TOP unchanged in both states; the advertised command is usable only in TRANSACTION. | TestCapaTopContract |
+| POP3-CAPA-07 | RFC 2449 §6.8 | Normative | Announce parameterless UIDL unchanged in both states; the advertised single and multiline commands are usable only in TRANSACTION. | TestCapaUIDLContract |
+| POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | n/a: AUTH/SASL is not implemented or advertised; Backend only supports USER/PASS authentication. Adding mechanisms needs a new authentication API, not a fabricated mechanism list. |
+| POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. |
+| POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | n/a: the optional IMPLEMENTATION capability is not advertised; there is no configured implementation-identification value. No client behavior based on implementation identity is provided. |
+| POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8 and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
+
+The configuration matrix combines the optional LOGIN-DELAY and UTF8 backend
+interfaces, with and without TLS. It checks the full actual CAPA list before TLS,
+after a verified handshake, and after authentication, including parameter changes.
+TOP/UIDL capability proofs also execute their advertised commands and check their
+state restrictions. The n/a entries distinguish unsupported optional features,
+unavailable host retention policy, and duties belonging to clients; they are not
+proofs of those features or host/client conformance.
 
 ## RFC 1939 §5: selected TRANSACTION requirements
 
@@ -127,6 +141,9 @@ a temporary self-signed localhost certificate trusted by the client, normal
 certificate/hostname verification, bounded client deadlines and joined session
 goroutines. TLS 1.3 is the test fixture's choice, not a claimed RFC 2595 mandate.
 Re-issued encrypted CAPA verifies the transition, not client cache management.
+POP3-STLS-08 additionally configures mandatory, verified TLS client certificates
+and observes the server verify the actual peer certificate; even then, no
+maildrop command succeeds until a separate USER/PASS exchange.
 The two POLICY rows describe existing library choices: configuring TLS refuses
 plaintext USER/PASS, and a failed handshake closes the session. They are not
 universal RFC mandates. POP3-STLS-07 is also library policy: RFC 2595 does not
@@ -145,6 +162,8 @@ and failed the test. Nil TLS configuration permits plaintext authentication.
 | POP3-STLS-05 | RFC 2595 §4; RFC 2449 §5 | Normative | Re-issued CAPA after TLS omits STLS and retains USER; preserve that encrypted capability list after authentication. | TestSTLSCredentials |
 | POP3-STLS-06 | RFC 2595 §4 | Normative | Permit STLS only in AUTHORIZATION; refuse it in TRANSACTION and exercise the permitted refusal when TLS is already active. | TestSTLSStates |
 | POP3-STLS-07 | RFC 2595 §4; RFC 2449 §6.6 (library policy) | Normative | Plaintext commands pipelined after STLS in the same read are discarded at the handshake: no injected USER/PASS authenticates or is retained, and no injected command is answered under TLS. | TestSTLSDiscardsPipelinedPlaintext |
+| POP3-STLS-08 | RFC 2595 §4 | Normative | Remain in AUTHORIZATION even when a verified client certificate is supplied during STLS; require a separate POP3 login before granting maildrop access. | TestSTLSClientCertificateRequiresPOPLogin |
+| POP3-STLS-09 | RFC 2595 §4 | MUST | A client discards cached server capabilities after TLS and SHOULD reissue CAPA. | n/a: this package implements a server, with no POP3 client or capability cache. Encrypted CAPA replies are tested separately; the test client's fresh query does not prove a production client's cache handling. |
 | POP3-TLS-POLICY-01 | RFC 2595 §§2.5, 4 (library policy) | Normative | With TLS configured, refuse plaintext USER/PASS without calling backend authentication; accept valid credentials through TLS exactly once. | TestSTLSCredentials |
 | POP3-TLS-POLICY-02 | RFC 2595 §2.5 (library policy) | Normative | Close after a malformed TLS record header during STLS negotiation without calling backend authentication. | TestSTLSHandshakeFailure |
 
@@ -253,6 +272,7 @@ remain credential failures under the backend contract.
 | POP3-RESP-CODES-05 | RFC 2449 §8.1.2 | Normative | Backend-signalled maildrop contention after valid credentials returns -ERR [IN-USE] on PASS, for direct or wrapped ErrInUse from Authenticate, AuthenticateUTF8 or Messages; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeInUse |
 | POP3-RESP-CODES-06 | RFC 2449 §8.1.1 | Normative | Backend-signalled login delay after valid credentials returns -ERR [LOGIN-DELAY] on PASS (never on USER), for direct or wrapped ErrLoginDelay from Authenticate; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeLoginDelay |
 | POP3-RESP-CODES-07 | RFC 3206 §4 | Normative | Backend-classified system failures from Authenticate or Messages return SYS/TEMP or SYS/PERM on PASS, directly or wrapped, never AUTH or private details; discard partial results, consume USER, retain AUTHORIZATION, and permit retry or QUIT without UPDATE. Authentication system failures neither record nor reset credential failures nor check bans. | TestResponseCodeBackendSystemFailures |
+| POP3-RESP-CODES-08 | RFC 2449 §§3, 6.4, 8 | Normative | Extended response codes are optional even after RESP-CODES is advertised: ordinary positive/negative replies and bracketed credential errors can coexist without changing command framing or recovery. | TestResponseCodesRemainOptional |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
 | POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
 | POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with -ERR [SYS/TEMP] without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
@@ -432,7 +452,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **89 mapped rows / 64 named wire tests**.
+The exact current PARTIAL inventory is **99 rows: 95 mapped, 4 n/a / 70 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
