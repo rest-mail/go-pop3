@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- CAPA advertises `AUTH-RESP-CODE` (RFC 3206 §6), and the PASS failure that
+  earns a limiter ban now replies `-ERR [AUTH] Too many authentication failures`,
+  so every credential-caused failure carries the AUTH response code. Checked
+  by POP3-RESP-CODES-03.
+
 - Checked RFC 8314 §3.4 implicit-TLS closure proofs for TLS 1.2 and 1.3,
   before and after login: QUIT and client close alerts receive a server
   close_notify before TCP termination. The test distinguishes an alert from

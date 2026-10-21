@@ -199,6 +199,7 @@ func (s *Session) handleCapa() {
 	s.sendLine("TOP")
 	s.sendLine("UIDL")
 	s.sendLine("RESP-CODES")
+	s.sendLine("AUTH-RESP-CODE")
 	s.sendLine("PIPELINING")
 	s.sendLine(".")
 }
@@ -289,7 +290,7 @@ func (s *Session) handlePass(arg string) {
 		)
 		s.limiter.RecordAuthFail(ip)
 		if s.limiter.IsBanned(ip) {
-			s.err("Too many authentication failures")
+			s.err("[AUTH] Too many authentication failures")
 			_ = s.conn.Close()
 			return
 		}

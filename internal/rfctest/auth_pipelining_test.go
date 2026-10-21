@@ -93,9 +93,9 @@ func TestAuthPipeliningSuccess(t *testing.T) {
 	authPipeline(t, w, []string{
 		"CAPA", "STAT", "USER alice", "PASS secret", "STAT", "CAPA", "NOOP",
 	}, []string{
-		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "PIPELINING", ".",
+		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", ".",
 		"-ERR Not authenticated", "+OK", "+OK Authentication successful", "+OK 1 42",
-		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "PIPELINING", ".", "+OK",
+		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", ".", "+OK",
 	})
 	// Fresh commands detect extra replies, unconsumed CAPA dots or lost state.
 	expect(t, w.cmd("STAT"), "+OK 1 42")
@@ -115,7 +115,7 @@ func TestAuthPipeliningFailureRetry(t *testing.T) {
 		"USER alice", "PASS secret", "STAT", "NOOP",
 	}, []string{
 		"+OK", "-ERR [AUTH] Authentication failed", "-ERR Not authenticated", "-ERR USER first",
-		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "PIPELINING", ".",
+		"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", ".",
 		"+OK", "+OK Authentication successful", "+OK 1 42", "+OK",
 	})
 	expect(t, w.cmd("STAT"), "+OK 1 42")

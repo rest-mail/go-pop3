@@ -69,8 +69,8 @@ func TestPOP3_FailedPassThatBansClosesSession(t *testing.T) {
 	if got := h.cmd("USER %s", m.user); !strings.HasPrefix(got, "+OK") {
 		t.Fatalf("USER = %q", got)
 	}
-	if got := h.cmd("PASS wrong"); got != "-ERR Too many authentication failures" {
-		t.Fatalf("PASS = %q, want -ERR Too many authentication failures", got)
+	if got := h.cmd("PASS wrong"); got != "-ERR [AUTH] Too many authentication failures" {
+		t.Fatalf("PASS = %q, want -ERR [AUTH] Too many authentication failures", got)
 	}
 	select {
 	case <-done:

@@ -11,7 +11,7 @@ func TestPassRequiresImmediateUser(t *testing.T) {
 			name, command string
 			replies       []string
 		}{
-			{"capa", "CAPA", []string{"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "PIPELINING", "."}},
+			{"capa", "CAPA", []string{"+OK Capability list follows", "USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", "."}},
 			{"unknown", "WHAT", []string{"-ERR Unknown command"}},
 			{"transaction", "STAT", []string{"-ERR Not authenticated"}},
 			{"malformed-user", "USER", []string{"-ERR Username required"}},
