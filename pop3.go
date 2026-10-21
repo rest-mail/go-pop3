@@ -39,11 +39,12 @@
 // TLS config is present the engine refuses USER on a plaintext connection, so
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
-// UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus UTF8
-// (RFC 6856) when the Backend is a [UTF8Backend]. Every PASS failure caused by
-// the credentials carries the [AUTH] response code; a maildrop that cannot be
-// loaded after good credentials carries [SYS/TEMP] (or [SYS/PERM] for a backend
-// that returns no Mailbox), per RFC 3206 §4.
+// UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus LOGIN-DELAY
+// when the Backend is a [LoginDelayBackend] and UTF8 (RFC 6856) when it is
+// a [UTF8Backend]. Every PASS failure caused by the credentials carries
+// the [AUTH] response code; a maildrop that cannot be loaded after good credentials
+// carries [SYS/TEMP] (or [SYS/PERM] for a backend that returns no Mailbox), per
+// RFC 3206 §4.
 //
 // # Rate limiting
 //
@@ -131,6 +132,29 @@ type Backend interface {
 	// these may be returned even when credentials could not be verified. On
 	// success it returns the [Mailbox] the session operates on.
 	Authenticate(user, pass string) (Mailbox, error)
+}
+
+// LoginDelayBackend is an optional [Backend] extension that announces the
+// RFC 2449 §6.5 LOGIN-DELAY capability. A Backend without it never has the tag
+// in CAPA. Announcing a delay does not enforce one: the Backend still tracks
+// login times and refuses early logins with [ErrLoginDelay].
+type LoginDelayBackend interface {
+	Backend
+	// LoginDelay returns the minimum number of seconds between logins that CAPA
+	// announces in AUTHORIZATION state. perUser reports that some users have a
+	// longer delay; CAPA then appends USER, telling the client to re-issue CAPA
+	// after login to learn its own value. A negative seconds value omits the tag.
+	LoginDelay() (seconds int, perUser bool)
+}
+
+// LoginDelayMailbox is an optional [Mailbox] extension for a
+// [LoginDelayBackend]. In TRANSACTION state CAPA announces the value it returns,
+// the authenticated user's own delay in seconds, never followed by USER. A
+// Mailbox without it announces the Backend's minimum. A negative value omits
+// the tag.
+type LoginDelayMailbox interface {
+	Mailbox
+	LoginDelay() int
 }
 
 // UTF8Backend is an optional [Backend] extension for RFC 6856 internationalized

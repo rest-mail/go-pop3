@@ -43,6 +43,7 @@ Requirements below paraphrase the primary texts:
 | POP3-CAPA-02 | RFC 2449 §§3–5 | Normative | Positive CAPA has one capability per CRLF line, at most 512 octets per line, then a dot CRLF terminator. | TestCapaBothStates |
 | POP3-CAPA-03 | RFC 2449 §5 | MUST | Retain AUTHORIZATION capabilities in TRANSACTION (tested without TLS). | TestCapaBothStates |
 | POP3-CAPA-04 | RFC 2449 §6.2 | Normative | Announce parameterless USER in both states for USER/PASS support. | TestCapaBothStates |
+| POP3-CAPA-05 | RFC 2449 §6.5 | Normative | When the Backend opts in, announce LOGIN-DELAY with the minimum seconds between logins in both states, followed by USER only in AUTHORIZATION when the value varies per user, and the user's own value in TRANSACTION. | TestCapaLoginDelay, TestCapaLoginDelayRequiresBackend |
 
 ## RFC 1939 §5: selected TRANSACTION requirements
 
@@ -275,8 +276,11 @@ recently. PASS replies `-ERR [LOGIN-DELAY]`; USER always replies `+OK`, as RFC
 2449 §8.1.1 recommends, so the code never reveals that an account exists before
 its password is checked. Four wire cases cover direct/wrapped errors, repeated
 refusal, and either successful retry or AUTHORIZATION QUIT without UPDATE.
-Tracking login times and choosing the delay remain the backend's job. The
-optional `LOGIN-DELAY` CAPA tag (RFC 2449 §6.5) is not announced yet.
+Tracking login times and choosing the delay remain the backend's job. A
+`LoginDelayBackend` announces the optional `LOGIN-DELAY` CAPA tag (RFC 2449
+§6.5, POP3-CAPA-05): its minimum in AUTHORIZATION, with `USER` when the delay
+varies per user, and the value from a `LoginDelayMailbox` (or the minimum) in
+TRANSACTION. Announcing a delay does not enforce it.
 
 The backend-system proof covers 16 wire cases: TEMP/PERM, Authenticate/Messages,
 direct/wrapped errors and retry/QUIT. Authentication infrastructure failures can
@@ -420,7 +424,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **87 mapped rows / 61 named wire tests**.
+The exact current PARTIAL inventory is **89 mapped rows / 64 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -529,7 +533,7 @@ crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
-hierarchical/unknown-code client handling, the LOGIN-DELAY CAPA tag, production maildrop-lock
+hierarchical/unknown-code client handling, production maildrop-lock
 integration and transaction-command system codes), the full RFC 3206 credential-error
 contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,

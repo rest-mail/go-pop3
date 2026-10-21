@@ -206,10 +206,39 @@ func (s *Session) handleCapa() {
 	s.sendLine("RESP-CODES")
 	s.sendLine("AUTH-RESP-CODE")
 	s.sendLine("PIPELINING")
+	if tag, ok := s.loginDelayTag(); ok {
+		s.sendLine("%s", tag)
+	}
 	if _, ok := s.backend.(UTF8Backend); ok {
 		s.sendLine("UTF8")
 	}
 	s.sendLine(".")
+}
+
+// loginDelayTag builds the LOGIN-DELAY capability line (RFC 2449 §6.5) for the
+// current state. AUTHORIZATION announces the Backend's minimum, followed by USER
+// when the delay varies per user; TRANSACTION announces the user's own value
+// when the Mailbox reports one.
+func (s *Session) loginDelayTag() (string, bool) {
+	b, ok := s.backend.(LoginDelayBackend)
+	if !ok {
+		return "", false
+	}
+	seconds, perUser := b.LoginDelay()
+	if s.mailbox != nil {
+		perUser = false
+		if m, ok := s.mailbox.(LoginDelayMailbox); ok {
+			seconds = m.LoginDelay()
+		}
+	}
+	if seconds < 0 {
+		return "", false
+	}
+	tag := "LOGIN-DELAY " + strconv.Itoa(seconds)
+	if perUser {
+		tag += " USER"
+	}
+	return tag, true
 }
 
 // handleUTF8 enables UTF-8 mode (RFC 6856 §3.1). The command is valid only in

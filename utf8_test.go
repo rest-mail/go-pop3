@@ -71,3 +71,30 @@ func TestUTF8PlainBackend(t *testing.T) {
 		t.Errorf("UTF8 = %q, want -ERR Unknown command", r)
 	}
 }
+
+// A backend can opt into both extensions without either CAPA tag hiding the
+// other, including after AuthenticateUTF8 enters TRANSACTION state.
+type utf8LoginDelayBackend struct{ *utf8MockBackend }
+
+func (*utf8LoginDelayBackend) LoginDelay() (int, bool) { return 300, true }
+
+func TestUTF8WithLoginDelay(t *testing.T) {
+	m := &utf8LoginDelayBackend{&utf8MockBackend{mockBackend: newMockBackend()}}
+	h := newPOP3HarnessFor(t, m, m.mockBackend)
+
+	want := []string{"USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", "LOGIN-DELAY 300 USER", "UTF8"}
+	if caps := capaLines(h); !slices.Equal(caps, want) {
+		t.Fatalf("AUTHORIZATION CAPA = %q, want %q", caps, want)
+	}
+	if r := h.cmd("UTF8"); r != "+OK UTF8 enabled" {
+		t.Fatalf("UTF8 = %q", r)
+	}
+	h.login()
+	if !slices.Equal(m.logins, []bool{true}) {
+		t.Errorf("AuthenticateUTF8 modes = %v, want [true]", m.logins)
+	}
+	want[6] = "LOGIN-DELAY 300"
+	if caps := capaLines(h); !slices.Equal(caps, want) {
+		t.Errorf("TRANSACTION CAPA = %q, want %q", caps, want)
+	}
+}

@@ -38,7 +38,8 @@ so what the client downloads is exactly what you stored.
   password typed on its own, is logged only as `<unknown command redacted>`.
 - `CAPA` capability advertisement ([RFC 2449](https://www.rfc-editor.org/rfc/rfc2449)):
   `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
-  ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`, and
+  ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`,
+  `LOGIN-DELAY` for a `LoginDelayBackend`, and
   `UTF8` ([RFC 6856](https://www.rfc-editor.org/rfc/rfc6856)) when the backend
   implements `UTF8Backend`: the `UTF8` command is accepted before login and
   `AuthenticateUTF8` learns whether the client may receive raw UTF-8 headers.
@@ -144,7 +145,10 @@ Likewise, `Authenticate` may return `pop3.ErrLoginDelay` (directly or wrapped)
 after verifying credentials to refuse a login that comes too soon after the
 last one. PASS then replies `-ERR [LOGIN-DELAY]` and permits a later USER/PASS
 attempt without counting an authentication failure. The backend tracks login
-times and chooses the delay.
+times and chooses the delay. To tell clients the delay in advance, implement
+`pop3.LoginDelayBackend`: CAPA then announces `LOGIN-DELAY <seconds>` before
+login, followed by `USER` when the delay varies per user. A Mailbox that also
+implements `pop3.LoginDelayMailbox` announces the user's own value after login.
 
 For login infrastructure failures, `Authenticate` and `Messages` may return
 `pop3.ErrSystemTemporary` or `pop3.ErrSystemPermanent` (directly or wrapped).
