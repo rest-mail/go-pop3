@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- POP3-LENGTH-02 (`TestResponseFirstLineLimit`) proves RFC 2449 §4: the first
+  response line, including the greeting, stays within 512 octets for
+  maximum-length commands in both states.
+
 - `LoginDelayBackend` and `LoginDelayMailbox` announce the RFC 2449 §6.5
   `LOGIN-DELAY` CAPA tag: the Backend's minimum in AUTHORIZATION (followed by
   `USER` when the delay varies per user) and the user's own value in
