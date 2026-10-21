@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked STARTTLS command-injection proof (POP3-STLS-07): plaintext commands
+  pipelined behind STLS in one write are dropped at the handshake, so an
+  injected USER/PASS never authenticates and no injected command is answered
+  under TLS. Tests only; no runtime change.
+
 - CAPA advertises `AUTH-RESP-CODE` (RFC 3206 §6), and the PASS failure that
   earns a limiter ban now replies `-ERR [AUTH] Too many authentication failures`,
   so every credential-caused failure carries the AUTH response code. Checked
