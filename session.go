@@ -281,6 +281,13 @@ func (s *Session) handlePass(arg string) {
 	ip := extractIP(s.conn.RemoteAddr().String())
 
 	mailbox, err := s.backend.Authenticate(username, arg)
+	if errors.Is(err, ErrInUse) {
+		// ErrInUse is a backend assertion that the credentials were valid;
+		// contention must not earn an authentication-failure ban.
+		s.limiter.ResetAuth(ip)
+		s.err("[IN-USE] Maildrop already in use")
+		return
+	}
 	if err != nil {
 		slog.Warn("pop3: auth failed",
 			"remote", s.conn.RemoteAddr(),
@@ -318,6 +325,10 @@ func (s *Session) handlePass(arg string) {
 	// TRANSACTION with a phantom empty maildrop and cannot re-authenticate.
 	messages, err := mailbox.Messages()
 	if err != nil {
+		if errors.Is(err, ErrInUse) {
+			s.err("[IN-USE] Maildrop already in use")
+			return
+		}
 		slog.Error("pop3: failed to load mailbox", "error", err)
 		s.err("Failed to load mailbox")
 		return

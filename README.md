@@ -129,6 +129,14 @@ A message's slice position (+1) in the `Messages()` result is the POP3 message
 number the client uses for the rest of the session; the engine translates
 between those numbers and your stable `UID`s.
 
+After verifying credentials, `Authenticate` or `Messages` may return
+`pop3.ErrInUse` (directly or wrapped with `%w`) if another session owns the
+maildrop. PASS then replies `-ERR [IN-USE]`, clears the pending USER and permits
+a fresh USER/PASS attempt. This resets credential-failure history without
+recording an authentication failure or checking for a ban. Partial results are
+ignored. The backend must acquire and release maildrop locks itself; the engine
+does not implement locking. Use `ErrInUse` only after credentials are verified.
+
 ## Server
 
 `NewServer(backend, tlsConfig, limiter)` builds a `Server`. `ListenAndServe`
