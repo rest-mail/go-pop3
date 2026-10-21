@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- PASS failures after good credentials now carry RFC 3206 §4 system codes: a
+  maildrop that fails to load replies `-ERR [SYS/TEMP] Failed to load mailbox`
+  and a backend that returns no Mailbox replies
+  `-ERR [SYS/PERM] Failed to load mailbox` (both were plain `-ERR`). Checked by
+  POP3-RESP-CODES-04.
+
 ### Added
 
 - Checked RFC 1939 §3 autologout proof for partial commands after STLS

@@ -80,13 +80,65 @@ func TestResponseCodeMaildropFailure(t *testing.T) {
 	w := connect(t, backend{password: "secret", loadErr: errors.New("private backend detail")})
 	for range 2 {
 		expect(t, w.cmd("USER alice"), "+OK")
-		// Valid credentials followed by Messages failure are not an AUTH error.
-		// A plain -ERR is permitted: RESP-CODES does not require a code on every error.
-		expect(t, w.cmd("PASS secret"), "-ERR Failed to load mailbox")
+		// Valid credentials followed by Messages failure are not an AUTH error,
+		// and the backend's error text never reaches the client.
+		expect(t, w.cmd("PASS secret"), "-ERR [SYS/TEMP] Failed to load mailbox")
 		expect(t, w.cmd("PASS secret"), "-ERR USER first")
 		expect(t, w.cmd("STAT"), "-ERR Not authenticated")
 	}
 	expect(t, w.cmd("QUIT"), "+OK POP3 server signing off")
+}
+
+// nilMailboxBackend accepts the credentials but returns no Mailbox, a backend
+// bug the session must refuse rather than dereference.
+type nilMailboxBackend struct{}
+
+func (nilMailboxBackend) Authenticate(string, string) (pop3.Mailbox, error) { return nil, nil }
+
+// RFC 3206 §4: a failure after good credentials is a system error. A maildrop
+// that fails to load is likely transient (SYS/TEMP); a backend that hands back
+// no Mailbox needs intervention (SYS/PERM). Neither is labelled AUTH, neither
+// counts against the limiter, and the session stays in AUTHORIZATION.
+// checklist: POP3-RESP-CODES-04
+func TestResponseCodeSystemFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		backend pop3.Backend
+		want    string
+	}{
+		{"load-error", backend{password: "secret", loadErr: errors.New("store locked")}, "-ERR [SYS/TEMP] Failed to load mailbox"},
+		{"nil-mailbox", nilMailboxBackend{}, "-ERR [SYS/PERM] Failed to load mailbox"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			limiter := &authRespBanLimiter{limit: 1}
+			client, server := net.Pipe()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				pop3.NewSession(server, tc.backend, nil, limiter).Handle()
+			}()
+			t.Cleanup(func() { _ = client.Close() })
+			w := &wire{t: t, conn: client, reader: bufio.NewReader(client), done: done}
+			w.status(w.line(), "+OK")
+			for range 2 {
+				expect(t, w.cmd("USER alice"), "+OK")
+				// Exact equality pins the code, its slash-separated hierarchy and
+				// the brackets right after the status space.
+				expect(t, w.cmd("PASS secret"), tc.want)
+				expect(t, w.cmd("STAT"), "-ERR Not authenticated")
+			}
+			expect(t, w.cmd("QUIT"), "+OK POP3 server signing off")
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("session still open after QUIT")
+			}
+			// A limiter that bans on the first recorded failure saw none.
+			if limiter.fails != 0 {
+				t.Fatalf("RecordAuthFail calls = %d, want 0", limiter.fails)
+			}
+		})
+	}
 }
 
 // authRespBanLimiter bans an address once a set number of credential failures

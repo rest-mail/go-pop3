@@ -302,13 +302,14 @@ func (s *Session) handlePass(arg string) {
 
 	// A backend that returns (nil, nil) authenticated the user but handed us no
 	// mailbox. Reject it and stay in AUTHORIZATION rather than dereferencing a
-	// nil Mailbox interface below.
+	// nil Mailbox interface below. A backend bug will not heal on retry, so
+	// the reply carries RFC 3206 §4 SYS/PERM rather than a credential code.
 	if mailbox == nil {
 		slog.Error("pop3: backend returned nil mailbox",
 			"remote", s.conn.RemoteAddr(),
 			"user", username,
 		)
-		s.err("Failed to load mailbox")
+		s.err("[SYS/PERM] Failed to load mailbox")
 		return
 	}
 
@@ -317,9 +318,12 @@ func (s *Session) handlePass(arg string) {
 	// if the load fails after we flip the flag, the client is wedged in
 	// TRANSACTION with a phantom empty maildrop and cannot re-authenticate.
 	messages, err := mailbox.Messages()
+	// The credentials were good, so this is a system error, not AUTH. RFC 3206
+	// §4 SYS/TEMP tells the client the failure is likely transient (a locked or
+	// unavailable store) and a later retry may succeed.
 	if err != nil {
 		slog.Error("pop3: failed to load mailbox", "error", err)
-		s.err("Failed to load mailbox")
+		s.err("[SYS/TEMP] Failed to load mailbox")
 		return
 	}
 
