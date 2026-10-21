@@ -41,7 +41,9 @@
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
 // UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus UTF8
 // (RFC 6856) when the Backend is a [UTF8Backend]. Every PASS failure caused by
-// the credentials carries the [AUTH] response code.
+// the credentials carries the [AUTH] response code; a maildrop that cannot be
+// loaded after good credentials carries [SYS/TEMP] (or [SYS/PERM] for a backend
+// that returns no Mailbox), per RFC 3206 §4.
 //
 // # Rate limiting
 //
@@ -114,13 +116,15 @@ func OctetCount(raw []byte) int {
 	return len(wireMessage(string(raw)))
 }
 
-// Backend authenticates POP3 users. A [Server] calls Authenticate once per
-// session, after USER and PASS have both been received.
+// Backend authenticates POP3 users. A [Session] calls Authenticate for each
+// complete USER/PASS attempt until it enters TRANSACTION.
 type Backend interface {
 	// Authenticate validates the USER/PASS credentials. Returning a non-nil error
 	// rejects the login (the client sees "-ERR ...") and counts as an auth
-	// failure against the [Limiter]. On success it returns the [Mailbox] the
-	// session operates on.
+	// failure against the [Limiter], except for [ErrInUse], which reports valid
+	// credentials but an already-open maildrop and receives [IN-USE] instead of
+	// [AUTH]. Wrapped ErrInUse errors are recognized with errors.Is. On success
+	// it returns the [Mailbox] the session operates on.
 	Authenticate(user, pass string) (Mailbox, error)
 }
 
@@ -142,7 +146,12 @@ type UTF8Backend interface {
 // user that [Backend.Authenticate] accepted; a Mailbox is used by one session.
 type Mailbox interface {
 	// Messages returns the maildrop contents oldest-first. It is called once,
-	// immediately after authentication.
+	// immediately after each successful Authenticate call. Returning [ErrInUse]
+	// (possibly wrapped) refuses transaction access with [IN-USE] and permits a
+	// fresh USER/PASS attempt; it does not count as a credential failure. Any
+	// other non-nil error refuses the login with "-ERR [SYS/TEMP] ..." (RFC 3206
+	// §4) and leaves the session in AUTHORIZATION; the error text is logged,
+	// never sent to the client.
 	Messages() ([]Message, error)
 	// Retrieve returns the full RFC 5322 bytes of the message with the given UID.
 	// RETR and TOP serve these bytes with line endings canonicalized to CRLF and

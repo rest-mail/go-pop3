@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- PASS failures after good credentials now carry RFC 3206 §4 system codes: a
+  maildrop that fails to load replies `-ERR [SYS/TEMP] Failed to load mailbox`
+  and a backend that returns no Mailbox replies
+  `-ERR [SYS/PERM] Failed to load mailbox` (both were plain `-ERR`). Checked by
+  POP3-RESP-CODES-04.
+
 ### Added
 
 - RFC 6856 `UTF8` support through the optional `UTF8Backend` interface: CAPA
@@ -14,6 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   client's mode so the backend can serve raw UTF-8 headers or downgrade them
   (RFC 6857). A plain `Backend` keeps the old behavior: no `UTF8` in CAPA and
   `-ERR Unknown command` for `UTF8`.
+
+- Backends may return `ErrInUse` (including wrapped errors) from `Authenticate`
+  or `Messages` after verifying credentials to report an already-open maildrop.
+  PASS replies `-ERR [IN-USE]` (RFC 2449 §8.1.2), consumes the pending USER,
+  stays in AUTHORIZATION and resets credential-failure history without recording
+  a failure or checking for a ban. Checked POP3-RESP-CODES-05 covers repeated
+  contention, partial results, successful retry and QUIT. Locking remains the
+  backend's responsibility.
 
 - Checked RFC 1939 §3 autologout proof for partial commands after STLS
   (POP3-IDLE-08): a genuine timeout below TLS while an encrypted USER, PASS or
