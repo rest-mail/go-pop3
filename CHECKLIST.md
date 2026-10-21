@@ -307,8 +307,9 @@ ten-minute duration is thus proved from the configured deadline, not from
 elapsed wall-clock time. Fixtures use memory, nil TLS and the no-op limiter.
 Expiry in AUTHORIZATION covers greeting-idle and pending-USER states
 (POP3-IDLE-05), plus buffered partial USER/PASS lines (POP3-IDLE-06), and expiry
-after STLS (POP3-IDLE-07). Other partial commands, partial commands after STLS
-and real socket keepalive behavior remain outside this selected inventory.
+after STLS (POP3-IDLE-07), including buffered partial USER/PASS/QUIT lines
+after STLS (POP3-IDLE-08). Other partial commands and real socket keepalive
+behavior remain outside this selected inventory.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -319,6 +320,7 @@ and real socket keepalive behavior remain outside this selected inventory.
 | POP3-IDLE-05 | RFC 1939 §3 | Normative | A real read timeout in AUTHORIZATION, both immediately after the greeting and after an accepted USER with no PASS sent, closes without a response and never reaches backend Authenticate (so no mailbox operation). | TestIdlePreLoginTimeout |
 | POP3-IDLE-06 | RFC 1939 §3 | Normative | On a timeout with a buffered partial USER or PASS in AUTHORIZATION, close without a response or backend authentication; never dispatch the incomplete command. | TestIdlePreLoginPartialCommandTimeout |
 | POP3-IDLE-07 | RFC 1939 §3; RFC 2595 §4 | Normative | After STLS, the encrypted idle interval is renewed to at least ten minutes after the handshake and each encrypted reply; a real timeout below TLS, after the handshake, after an encrypted USER, or in TRANSACTION with two DELE marks, closes with only TLS close_notify, never authenticates beyond the PASS sent and never enters UPDATE. | TestIdleTimeoutAfterSTLS |
+| POP3-IDLE-08 | RFC 1939 §3, §6; RFC 2595 §4 | Normative | After STLS, a real timeout below TLS while an encrypted incomplete `USER`, `PASS` or `QUIT` (no terminator, or CR without LF) is buffered closes with only TLS close_notify, never dispatches it, never authenticates beyond the complete PASS sent and never enters UPDATE after two DELE marks. | TestIdleTimeoutAfterSTLSWithBufferedPartialCommand |
 
 ## RFC 1939 §10: ADAPTED TRANSACTION example
 
@@ -382,8 +384,8 @@ its row mapping. UIDL-session controls additionally remove each new test, row
 and annotation, and empty each new row mapping; every mutation must fail.
 Immediate-PASS controls also remove its test, row and annotation and empty its
 row mapping; every mutation must fail. Autologout controls do the same for
-POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04, POP3-IDLE-05, POP3-IDLE-06 and
-POP3-IDLE-07.
+POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04, POP3-IDLE-05, POP3-IDLE-06,
+POP3-IDLE-07 and POP3-IDLE-08.
 Generic checker source/tests remain pinned and unchanged.
 
 Immediate-PASS regression validation replaces only `session.go` with baseline
@@ -454,14 +456,30 @@ Temporary controls on `session.go` (restored, SHA-256 checked): skipping the
 renewal under TLS fails all three cases waiting for the renewed deadline;
 writing `-ERR` on a TLS read error fails all three on the response byte;
 running QUIT handling on a TLS read error with a mailbox fails the TRANSACTION
-case on its `+OK`. Limits: the timeout is forced, and partial commands after
-STLS are not covered.
+case on its `+OK`. Limits: the timeout is forced; partial commands after STLS
+are covered separately below.
+
+The buffered STLS proof (POP3-IDLE-08) reuses that harness for six cases over
+TLS 1.3: encrypted `USER alice` right after the handshake, `PASS secret` after an
+encrypted USER, and `QUIT` in TRANSACTION after two DELE marks, each with no
+terminator and with CR but no LF. The client's raw pipe end counts the bytes it
+writes below TLS, and the server's raw end records how many bytes it had
+consumed when each Read entered. A Read entered after every written byte was
+consumed, with no further deadline renewal, proves the decrypted partial line is
+buffered and the session waits for its LF, with no sleep. Forcing the raw read
+deadline into the past then yields `os.ErrDeadlineExceeded` below TLS; the
+client reads EOF from close_notify with no POP3 byte, `Handle` returns,
+Authenticate ran only for a complete PASS, and no Delete happened. Temporary
+control on `session.go` (restored with git checkout): returning the buffered
+partial line on a read error dispatches it, and all six cases fail on the `+`
+response byte. Limits: the timeout is forced; only USER, PASS and QUIT partials
+are covered.
 
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the remaining AUTHORIZATION inventory (including full USER command
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, remaining RFC 1939 §3 autologout cases (partial commands after
-STLS, other partial commands and transport variants), remaining TOP/UIDL vectors and production cross-session UID persistence,
+contracts, remaining RFC 1939 §3 autologout cases (other partial commands and
+transport variants), remaining TOP/UIDL vectors and production cross-session UID persistence,
 crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS

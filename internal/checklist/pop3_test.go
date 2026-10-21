@@ -146,6 +146,7 @@ func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 		{"POP3-IDLE-05", "TestIdlePreLoginTimeout", "idle_test.go"},
 		{"POP3-IDLE-06", "TestIdlePreLoginPartialCommandTimeout", "idle_test.go"},
 		{"POP3-IDLE-07", "TestIdleTimeoutAfterSTLS", "stls_idle_test.go"},
+		{"POP3-IDLE-08", "TestIdleTimeoutAfterSTLSWithBufferedPartialCommand", "stls_idle_test.go"},
 	} {
 		var row string
 		for _, line := range strings.Split(string(checklist), "\n") {

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked RFC 1939 §3 autologout proof for partial commands after STLS
+  (POP3-IDLE-08): a genuine timeout below TLS while an encrypted USER, PASS or
+  QUIT without its LF is buffered closes with only close_notify, never
+  dispatches the line, authenticates no further and never enters UPDATE.
+  Tests only; no runtime change.
+
 - Checked STARTTLS command-injection proof (POP3-STLS-07): plaintext commands
   pipelined behind STLS in one write are dropped at the handshake, so an
   injected USER/PASS never authenticates and no injected command is answered
