@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked RFC 1939 §3 autologout proof after STLS: the encrypted idle
+  interval is renewed to at least ten minutes, and a genuine timeout below TLS
+  after the handshake, an encrypted USER or two DELE marks closes with only
+  close_notify, with no extra authentication and no UPDATE. Tests only; no
+  runtime change.
+
 - Checked RFC 8314 §3.4 implicit-TLS closure proofs for TLS 1.2 and 1.3,
   before and after login: QUIT and client close alerts receive a server
   close_notify before TCP termination. The test distinguishes an alert from

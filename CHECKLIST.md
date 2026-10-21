@@ -296,9 +296,9 @@ session then sees a genuine `os.ErrDeadlineExceeded` timeout, not EOF. The
 ten-minute duration is thus proved from the configured deadline, not from
 elapsed wall-clock time. Fixtures use memory, nil TLS and the no-op limiter.
 Expiry in AUTHORIZATION covers greeting-idle and pending-USER states
-(POP3-IDLE-05), plus buffered partial USER/PASS lines (POP3-IDLE-06). Expiry
-after STLS, other partial commands and real socket keepalive behavior remain
-outside this selected inventory.
+(POP3-IDLE-05), plus buffered partial USER/PASS lines (POP3-IDLE-06), and expiry
+after STLS (POP3-IDLE-07). Other partial commands, partial commands after STLS
+and real socket keepalive behavior remain outside this selected inventory.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -308,6 +308,7 @@ outside this selected inventory.
 | POP3-IDLE-04 | RFC 1939 §3, §6 | Normative | A real read timeout while an incomplete command (`QUIT` or `QUIT\r`, no LF) is buffered closes without a response, never dispatches the partial command, does not enter UPDATE and makes no backend Delete after two DELE marks. | TestIdleTimeoutWithBufferedPartialCommand |
 | POP3-IDLE-05 | RFC 1939 §3 | Normative | A real read timeout in AUTHORIZATION, both immediately after the greeting and after an accepted USER with no PASS sent, closes without a response and never reaches backend Authenticate (so no mailbox operation). | TestIdlePreLoginTimeout |
 | POP3-IDLE-06 | RFC 1939 §3 | Normative | On a timeout with a buffered partial USER or PASS in AUTHORIZATION, close without a response or backend authentication; never dispatch the incomplete command. | TestIdlePreLoginPartialCommandTimeout |
+| POP3-IDLE-07 | RFC 1939 §3; RFC 2595 §4 | Normative | After STLS, the encrypted idle interval is renewed to at least ten minutes after the handshake and each encrypted reply; a real timeout below TLS, after the handshake, after an encrypted USER, or in TRANSACTION with two DELE marks, closes with only TLS close_notify, never authenticates beyond the PASS sent and never enters UPDATE. | TestIdleTimeoutAfterSTLS |
 
 ## RFC 1939 §10: ADAPTED TRANSACTION example
 
@@ -362,8 +363,8 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **76 mapped rows / 51 named wire tests**
-(previous 75/50 preserved). Example negative-control inputs replace
+The exact current PARTIAL inventory is **81 mapped rows / 55 named wire tests**
+(previous 80/54 preserved). Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
 exit nonzero. The scoped mutation test also removes its annotation and empties
@@ -371,7 +372,8 @@ its row mapping. UIDL-session controls additionally remove each new test, row
 and annotation, and empty each new row mapping; every mutation must fail.
 Immediate-PASS controls also remove its test, row and annotation and empty its
 row mapping; every mutation must fail. Autologout controls do the same for
-POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04, POP3-IDLE-05 and POP3-IDLE-06.
+POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04, POP3-IDLE-05, POP3-IDLE-06 and
+POP3-IDLE-07.
 Generic checker source/tests remain pinned and unchanged.
 
 Immediate-PASS regression validation replaces only `session.go` with baseline
@@ -426,11 +428,30 @@ Authenticate on read error, producing a nonzero backend count in all four cases.
 This closes the selected plaintext partial-USER/PASS gap, not arbitrary partial
 commands, STLS expiry, or a real ten-minute elapsed-time proof.
 
+The STLS proof (POP3-IDLE-07) records deadlines on the raw `net.Pipe` end below
+the `tls.Conn` that STLS installs, which forwards SetDeadline to it. A TLS
+session reads several times per record and during the handshake, so each Read
+entry reports how many deadlines had been set; the first Read under a new
+deadline marks the session waiting for its next command. Three cases run over
+TLS 1.3 with a temporary self-signed certificate: idle right after the
+handshake, after an encrypted USER, and in TRANSACTION after two DELE marks.
+Each deadline is at least ten minutes after both the server's final write
+(handshake or encrypted reply) and the client's send time. Forcing the raw
+pipe's read deadline into the past yields `os.ErrDeadlineExceeded` below TLS;
+the client then reads EOF from close_notify with no POP3 byte, `Handle` returns,
+Authenticate ran only for a PASS actually sent, and no Delete happened.
+Temporary controls on `session.go` (restored, SHA-256 checked): skipping the
+renewal under TLS fails all three cases waiting for the renewed deadline;
+writing `-ERR` on a TLS read error fails all three on the response byte;
+running QUIT handling on a TLS read error with a mailbox fails the TRANSACTION
+case on its `+OK`. Limits: the timeout is forced, and partial commands after
+STLS are not covered.
+
 Follow-ups under [rest-mail/rest-mail-server#374](https://github.com/rest-mail/rest-mail-server/issues/374)
 include the remaining AUTHORIZATION inventory (including full USER command
 sequencing and mailbox locking/backend contracts), remaining UPDATE integration
-contracts, remaining RFC 1939 §3 autologout cases (expiry after STLS, and
-other partial commands and transport variants), remaining TOP/UIDL vectors and production cross-session UID persistence,
+contracts, remaining RFC 1939 §3 autologout cases (partial commands after
+STLS, other partial commands and transport variants), remaining TOP/UIDL vectors and production cross-session UID persistence,
 crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
