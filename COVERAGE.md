@@ -8,7 +8,20 @@ uncovered.
 
 | File | Function | Statements | Reason |
 |------|----------|------------|--------|
-| `server.go` | `acceptLoop` | `slog.Error(...)` and `continue` after an `Accept` error outside shutdown | Needs a listener whose `Accept` fails while the server is running. Not tested yet; a fake `net.Listener` would cover it. |
-| `server.go` | `acceptLoop` | `s.limiter.Release(ip)`, `conn.Close()` and `return` when `trackConn` refuses | Happens only when `Shutdown` wins the race between `Accept` returning and `trackConn` taking the lock; a test cannot order that without a hook in the server. |
-| `server.go` | `trackConn` | `return false` | The same shutdown race as above. |
 | `internal/checklist/main.go` | `main` | `os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))` | Exiting the process cannot be tested in-process. All of the checker's logic is in `run`, which the tests cover; CI also runs the command itself. |
+
+`server_accept_test.go` covers the former server exceptions with a controlled
+`net.Listener` and `net.Pipe`, without production hooks, sockets or sleeps:
+
+- `TestAcceptErrorRecovers` injects an Accept error while running, then accepts a
+  client that receives the greeting, authenticates and quits. Shutdown drains
+  both the accept loop and session; the limiter sees exactly one acquire/release
+  pair, so the failed Accept consumes no slot.
+- `TestAcceptConnectionAfterShutdown` holds a connection acquired by Accept until
+  the public `Close` closes the listener. Accept then returns that connection:
+  the server refuses registration, releases its limiter slot exactly once,
+  closes without a greeting, and stops accepting. No connection remains tracked.
+
+These are server lifecycle and coverage proofs, not additional RFC checklist
+claims. The complete RFC inventory and other follow-ups in `CHECKLIST.md` remain
+open.

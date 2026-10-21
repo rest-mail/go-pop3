@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Deterministic server lifecycle proofs for recovery after an `Accept` error and
+  a connection returned by `Accept` after shutdown: no lost limiter slot, no
+  greeting or session for the late connection, and bounded server drain. Removes
+  the remaining `server.go` coverage exceptions; no runtime change.
+
 - Checked RFC 8314 §3.1 implicit-TLS ("pop3s") proofs through the public
   `ListenAndServe`: TLS before the greeting, nothing sent in the clear to a
   plaintext client, AUTHORIZATION after the greeting, no STLS offered or
