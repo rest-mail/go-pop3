@@ -23,3 +23,18 @@ var ErrInUse = errors.New("maildrop already in use")
 // The backend remains responsible for tracking login times and choosing the
 // delay; the POP3 engine does not enforce one itself.
 var ErrLoginDelay = errors.New("login delay has not expired")
+
+// ErrSystemTemporary reports a system failure likely to resolve without user
+// intervention, such as an unavailable authentication service (RFC 3206 §4).
+// Backend.Authenticate or Mailbox.Messages may return it directly or wrapped.
+// PASS replies with -ERR [SYS/TEMP] and stays in AUTHORIZATION. An Authenticate
+// failure neither records nor clears credential-failure history and does not
+// check the ban list: the credentials may not have been verified. Partial
+// results and private error details are never sent to the client.
+var ErrSystemTemporary = errors.New("temporary system failure")
+
+// ErrSystemPermanent reports a system failure requiring intervention, such as
+// a corrupted maildrop or invalid service configuration (RFC 3206 §4). It has
+// the same contract as ErrSystemTemporary but PASS replies with -ERR [SYS/PERM].
+// These errors classify system failures only, never invalid credentials.
+var ErrSystemPermanent = errors.New("permanent system failure")

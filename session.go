@@ -295,6 +295,13 @@ func (s *Session) handlePass(arg string) {
 		s.err("[LOGIN-DELAY] Logged in too recently")
 		return
 	}
+	if errors.Is(err, ErrSystemTemporary) || errors.Is(err, ErrSystemPermanent) {
+		// A system outage does not establish whether the credentials were
+		// valid. Preserve their failure history without charging a failure.
+		slog.Error("pop3: authentication system failure", "error", err)
+		s.systemError(err, "Authentication unavailable")
+		return
+	}
 	if err != nil {
 		slog.Warn("pop3: auth failed",
 			"remote", s.conn.RemoteAddr(),
@@ -333,15 +340,15 @@ func (s *Session) handlePass(arg string) {
 	// TRANSACTION with a phantom empty maildrop and cannot re-authenticate.
 	messages, err := mailbox.Messages()
 	// The credentials were good, so this is not AUTH. A maildrop held by another
-	// session is IN-USE (RFC 2449 §8.1.2); anything else is a system error, and
-	// RFC 3206 §4 SYS/TEMP tells the client a later retry may succeed.
+	// session is IN-USE (RFC 2449 §8.1.2); other errors use the backend
+	// classification or default to SYS/TEMP (RFC 3206 §4).
 	if err != nil {
 		if errors.Is(err, ErrInUse) {
 			s.err("[IN-USE] Maildrop already in use")
 			return
 		}
 		slog.Error("pop3: failed to load mailbox", "error", err)
-		s.err("[SYS/TEMP] Failed to load mailbox")
+		s.systemError(err, "Failed to load mailbox")
 		return
 	}
 
@@ -352,6 +359,16 @@ func (s *Session) handlePass(arg string) {
 
 	slog.Info("pop3: authenticated", "remote", s.conn.RemoteAddr(), "user", username, "messages", len(s.messages))
 	s.ok("Authentication successful")
+}
+
+// systemError keeps backend details out of the wire response. Unclassified
+// maildrop errors remain temporary; an explicit permanent error takes priority.
+func (s *Session) systemError(err error, message string) {
+	code := "SYS/TEMP"
+	if errors.Is(err, ErrSystemPermanent) {
+		code = "SYS/PERM"
+	}
+	s.err("[%s] %s", code, message)
 }
 
 func (s *Session) handleStat() {

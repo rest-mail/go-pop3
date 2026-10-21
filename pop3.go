@@ -124,8 +124,11 @@ type Backend interface {
 	// credentials but an already-open maildrop and receives [IN-USE] instead of
 	// [AUTH], and [ErrLoginDelay], which reports valid credentials used too soon
 	// after the last login and receives [LOGIN-DELAY]. Wrapped errors are
-	// recognized with errors.Is. On success it returns the [Mailbox] the session
-	// operates on.
+	// recognized with errors.Is. [ErrSystemTemporary] and [ErrSystemPermanent]
+	// instead report system failures with [SYS/TEMP] or [SYS/PERM], without
+	// recording or clearing credential-failure history or checking for a ban;
+	// these may be returned even when credentials could not be verified. On
+	// success it returns the [Mailbox] the session operates on.
 	Authenticate(user, pass string) (Mailbox, error)
 }
 
@@ -135,8 +138,9 @@ type Mailbox interface {
 	// Messages returns the maildrop contents oldest-first. It is called once,
 	// immediately after each successful Authenticate call. Returning [ErrInUse]
 	// (possibly wrapped) refuses transaction access with [IN-USE] and permits a
-	// fresh USER/PASS attempt; it does not count as a credential failure. Any
-	// other non-nil error refuses the login with "-ERR [SYS/TEMP] ..." (RFC 3206
+	// fresh USER/PASS attempt; it does not count as a credential failure.
+	// [ErrSystemPermanent] refuses the login with [SYS/PERM]. Any other non-nil
+	// error, including [ErrSystemTemporary], uses "-ERR [SYS/TEMP] ..." (RFC 3206
 	// §4) and leaves the session in AUTHORIZATION; the error text is logged,
 	// never sent to the client.
 	Messages() ([]Message, error)

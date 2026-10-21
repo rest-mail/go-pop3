@@ -238,8 +238,10 @@ RFC 3206 §4 defines SYS/TEMP and SYS/PERM for system errors on PASS. After good
 credentials, a maildrop that fails to load replies SYS/TEMP (likely transient,
 such as a locked or unavailable store) and a backend that returns no Mailbox
 replies SYS/PERM (a backend bug that needs intervention). Neither counts against
-the limiter. Choosing TEMP versus PERM per path is library policy; the backend
-interface cannot yet classify its own errors.
+the limiter. Backend errors can explicitly select the class with
+`ErrSystemTemporary` or `ErrSystemPermanent`, directly or wrapped. Unclassified
+maildrop-load errors still default to TEMP; unclassified authentication errors
+remain credential failures under the backend contract.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -249,6 +251,7 @@ interface cannot yet classify its own errors.
 | POP3-RESP-CODES-04 | RFC 3206 §4 | Normative | On a system failure after good credentials, PASS replies `-ERR [SYS/TEMP]` when the maildrop fails to load and `-ERR [SYS/PERM]` when the backend returns no Mailbox, never AUTH; no limiter failure is recorded and the session stays in AUTHORIZATION. | TestResponseCodeSystemFailures |
 | POP3-RESP-CODES-05 | RFC 2449 §8.1.2 | Normative | Backend-signalled maildrop contention after valid credentials returns -ERR [IN-USE] on PASS, for direct or wrapped ErrInUse from Authenticate or Messages; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeInUse |
 | POP3-RESP-CODES-06 | RFC 2449 §8.1.1 | Normative | Backend-signalled login delay after valid credentials returns -ERR [LOGIN-DELAY] on PASS (never on USER), for direct or wrapped ErrLoginDelay from Authenticate; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeLoginDelay |
+| POP3-RESP-CODES-07 | RFC 3206 §4 | Normative | Backend-classified system failures from Authenticate or Messages return SYS/TEMP or SYS/PERM on PASS, directly or wrapped, never AUTH or private details; discard partial results, consume USER, retain AUTHORIZATION, and permit retry or QUIT without UPDATE. Authentication system failures neither record nor reset credential failures nor check bans. | TestResponseCodeBackendSystemFailures |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
 | POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
 | POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with -ERR [SYS/TEMP] without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
@@ -273,6 +276,16 @@ its password is checked. Four wire cases cover direct/wrapped errors, repeated
 refusal, and either successful retry or AUTHORIZATION QUIT without UPDATE.
 Tracking login times and choosing the delay remain the backend's job. The
 optional `LOGIN-DELAY` CAPA tag (RFC 2449 §6.5) is not announced yet.
+
+The backend-system proof covers 16 wire cases: TEMP/PERM, Authenticate/Messages,
+direct/wrapped errors and retry/QUIT. Authentication infrastructure failures can
+happen before credential verification, so they neither charge nor clear the
+limiter's credential-failure history and never check its ban list. After
+Authenticate succeeds, Messages failures retain the existing successful-login
+reset. Partial mailboxes/message lists are discarded. TEMP versus PERM is the
+backend's decision: TEMP permits a later retry; PERM calls for intervention.
+These sentinels apply to login opening only; transaction errors are outside
+this proof.
 
 ## RFC 2449 §§3–4: selected command-length support and library policy
 
@@ -516,7 +529,7 @@ remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
 hierarchical/unknown-code client handling, the LOGIN-DELAY CAPA tag, production maildrop-lock
-integration and backend-classified SYS/TEMP versus SYS/PERM), the full RFC 3206 credential-error
+integration and transaction-command system codes), the full RFC 3206 credential-error
 contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
 complete RFC vectors and differential testing,

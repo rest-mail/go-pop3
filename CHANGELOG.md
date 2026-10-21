@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `ErrSystemTemporary` and `ErrSystemPermanent` let `Authenticate` and `Messages`
+  classify login failures as `SYS/TEMP` or `SYS/PERM` (RFC 3206 §4), including
+  wrapped errors. Authentication system failures preserve credential-failure
+  history without recording a failure or checking for a ban. Private details
+  and partial results are discarded. Checked POP3-RESP-CODES-07 covers both
+  reporting points, classes, wrapping, repeated failure, retry and QUIT.
+
 - Backends may return `ErrLoginDelay` (including wrapped errors) from
   `Authenticate` after verifying credentials to refuse a login that comes too
   soon after the last one. PASS replies `-ERR [LOGIN-DELAY]` (RFC 2449 §8.1.1),
