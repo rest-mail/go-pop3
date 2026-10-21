@@ -40,7 +40,9 @@
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
 // UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING. Every PASS failure
-// caused by the credentials carries the [AUTH] response code.
+// caused by the credentials carries the [AUTH] response code; a maildrop that
+// cannot be loaded after good credentials carries [SYS/TEMP] (or [SYS/PERM] for
+// a backend that returns no Mailbox), per RFC 3206 §4.
 //
 // # Rate limiting
 //
@@ -127,7 +129,9 @@ type Backend interface {
 // user that [Backend.Authenticate] accepted; a Mailbox is used by one session.
 type Mailbox interface {
 	// Messages returns the maildrop contents oldest-first. It is called once,
-	// immediately after authentication.
+	// immediately after authentication. A non-nil error refuses the login with
+	// "-ERR [SYS/TEMP] ..." (RFC 3206 §4) and leaves the session in
+	// AUTHORIZATION; the error text is logged, never sent to the client.
 	Messages() ([]Message, error)
 	// Retrieve returns the full RFC 5322 bytes of the message with the given UID.
 	// RETR and TOP serve these bytes with line endings canonicalized to CRLF and

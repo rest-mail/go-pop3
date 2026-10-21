@@ -226,22 +226,29 @@ closing bracket record current library output, not additional RFC mandates.
 The POLICY rows are library regression contracts, represented as `Normative`
 for the checker's existing vocabulary; they are not RFC MUST/SHOULD claims.
 They pin identical public credential-failure replies, a fresh USER after a
-failed PASS, and plain maildrop-load errors without credential AUTH labeling or
+failed PASS, and maildrop-load errors without credential AUTH labeling or
 backend detail disclosure. Fixtures use memory, nil TLS and the default no-op
 limiter; backend Authenticate errors are treated as credential rejection here,
 not a proof that the interface classifies arbitrary backend failures correctly.
 RFC 3206 §6 says a server that labels credential failures with AUTH SHOULD
 advertise AUTH-RESP-CODE. The library now does: the PASS failure that earns a
 limiter ban is credential-caused, so its reply carries AUTH as well.
+RFC 3206 §4 defines SYS/TEMP and SYS/PERM for system errors on PASS. After good
+credentials, a maildrop that fails to load replies SYS/TEMP (likely transient,
+such as a locked or unavailable store) and a backend that returns no Mailbox
+replies SYS/PERM (a backend bug that needs intervention). Neither counts against
+the limiter. Choosing TEMP versus PERM per path is library policy; the backend
+interface cannot yet classify its own errors.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | POP3-RESP-CODES-01 | RFC 2449 §§6.4, 8 | Normative | Announce parameterless RESP-CODES in AUTHORIZATION and TRANSACTION for extended response-code support. | TestResponseCodeCapabilities |
 | POP3-RESP-CODES-02 | RFC 2449 §§3, 8; RFC 3206 §5 | Normative | On coded wrong-password and unknown-account PASS failures, AUTH denotes credential trouble and begins response text in brackets after the status space, with CRLF framing. | TestResponseCodeCredentialFailures |
 | POP3-RESP-CODES-03 | RFC 3206 §6 | SHOULD | Every credential-caused PASS failure carries AUTH (wrong password, unknown account, and the failure that earns a limiter ban), so CAPA lists parameterless AUTH-RESP-CODE exactly once in AUTHORIZATION and TRANSACTION. | TestResponseCodeAuthRespCodeCapability |
+| POP3-RESP-CODES-04 | RFC 3206 §4 | Normative | On a system failure after good credentials, PASS replies `-ERR [SYS/TEMP]` when the maildrop fails to load and `-ERR [SYS/PERM]` when the backend returns no Mailbox, never AUTH; no limiter failure is recorded and the session stays in AUTHORIZATION. | TestResponseCodeSystemFailures |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
 | POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
-| POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with plain -ERR without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
+| POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with -ERR [SYS/TEMP] without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
 
 ## RFC 2449 §§3–4: selected command-length support and library policy
 
@@ -484,7 +491,7 @@ crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
-hierarchical/unknown-code client handling, LOGIN-DELAY, IN-USE and SYS), the full RFC 3206 credential-error
+hierarchical/unknown-code client handling, LOGIN-DELAY, IN-USE and backend-classified SYS/TEMP versus SYS/PERM), the full RFC 3206 credential-error
 contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
 complete RFC vectors and differential testing,
