@@ -140,6 +140,25 @@ recording an authentication failure or checking for a ban. Partial results are
 ignored. The backend must acquire and release maildrop locks itself; the engine
 does not implement locking. Use `ErrInUse` only after credentials are verified.
 
+Likewise, `Authenticate` may return `pop3.ErrLoginDelay` (directly or wrapped)
+after verifying credentials to refuse a login that comes too soon after the
+last one. PASS then replies `-ERR [LOGIN-DELAY]` and permits a later USER/PASS
+attempt without counting an authentication failure. The backend tracks login
+times and chooses the delay.
+
+For login infrastructure failures, `Authenticate` and `Messages` may return
+`pop3.ErrSystemTemporary` or `pop3.ErrSystemPermanent` (directly or wrapped).
+PASS then replies with `SYS/TEMP` for a problem likely to resolve on retry or
+`SYS/PERM` for one requiring intervention ([RFC 3206 §4](https://www.rfc-editor.org/rfc/rfc3206#section-4)).
+Private error details and partial results stay out of the response. The session
+stays in AUTHORIZATION and requires a fresh USER/PASS attempt. An authentication
+service failure can occur before credentials are verified, so it neither
+records nor resets credential failures or checks for a ban. A successful
+`Authenticate` still resets failure history before calling `Messages`.
+Unclassified authentication errors remain credential failures (`AUTH`);
+unclassified `Messages` errors remain `SYS/TEMP`. These sentinels classify
+login-opening errors; transaction commands keep their existing error behavior.
+
 ## Server
 
 `NewServer(backend, tlsConfig, limiter)` builds a `Server`. `ListenAndServe`

@@ -61,13 +61,14 @@ func (l *inUseLimiter) check(t *testing.T, resets int32) {
 // contention. These are backend-signalled failures, not an engine lock proof.
 // checklist: POP3-RESP-CODES-05
 func TestResponseCodeInUse(t *testing.T) {
-	testResponseCodeInUse(t, false)
-}
-
-// Contention from AuthenticateUTF8 must receive the same response code and
-// limiter treatment, while preserving UTF8 mode through subsequent retries.
-func TestUTF8ResponseCodeInUse(t *testing.T) {
-	testResponseCodeInUse(t, true)
+	t.Run("Backend", func(t *testing.T) {
+		testResponseCodeInUse(t, false)
+	})
+	// AuthenticateUTF8 must receive the same response code and limiter
+	// treatment, while preserving UTF8 mode through subsequent retries.
+	t.Run("UTF8Backend", func(t *testing.T) {
+		testResponseCodeInUse(t, true)
+	})
 }
 
 type utf8InUseBackend struct{ *inUseBackend }
