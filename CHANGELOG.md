@@ -16,6 +16,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Backends may return `ErrInUse` (including wrapped errors) from `Authenticate`
+  or `Messages` after verifying credentials to report an already-open maildrop.
+  PASS replies `-ERR [IN-USE]` (RFC 2449 §8.1.2), consumes the pending USER,
+  stays in AUTHORIZATION and resets credential-failure history without recording
+  a failure or checking for a ban. Checked POP3-RESP-CODES-05 covers repeated
+  contention, partial results, successful retry and QUIT. Locking remains the
+  backend's responsibility.
+
 - Checked RFC 1939 §3 autologout proof for partial commands after STLS
   (POP3-IDLE-08): a genuine timeout below TLS while an encrypted USER, PASS or
   QUIT without its LF is buffered closes with only close_notify, never

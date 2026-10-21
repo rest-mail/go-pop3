@@ -281,6 +281,13 @@ func (s *Session) handlePass(arg string) {
 	ip := extractIP(s.conn.RemoteAddr().String())
 
 	mailbox, err := s.backend.Authenticate(username, arg)
+	if errors.Is(err, ErrInUse) {
+		// ErrInUse is a backend assertion that the credentials were valid;
+		// contention must not earn an authentication-failure ban.
+		s.limiter.ResetAuth(ip)
+		s.err("[IN-USE] Maildrop already in use")
+		return
+	}
 	if err != nil {
 		slog.Warn("pop3: auth failed",
 			"remote", s.conn.RemoteAddr(),
@@ -318,10 +325,14 @@ func (s *Session) handlePass(arg string) {
 	// if the load fails after we flip the flag, the client is wedged in
 	// TRANSACTION with a phantom empty maildrop and cannot re-authenticate.
 	messages, err := mailbox.Messages()
-	// The credentials were good, so this is a system error, not AUTH. RFC 3206
-	// §4 SYS/TEMP tells the client the failure is likely transient (a locked or
-	// unavailable store) and a later retry may succeed.
+	// The credentials were good, so this is not AUTH. A maildrop held by another
+	// session is IN-USE (RFC 2449 §8.1.2); anything else is a system error, and
+	// RFC 3206 §4 SYS/TEMP tells the client a later retry may succeed.
 	if err != nil {
+		if errors.Is(err, ErrInUse) {
+			s.err("[IN-USE] Maildrop already in use")
+			return
+		}
 		slog.Error("pop3: failed to load mailbox", "error", err)
 		s.err("[SYS/TEMP] Failed to load mailbox")
 		return
