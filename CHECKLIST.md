@@ -250,7 +250,7 @@ remain credential failures under the backend contract.
 | POP3-RESP-CODES-02 | RFC 2449 §§3, 8; RFC 3206 §5 | Normative | On coded wrong-password and unknown-account PASS failures, AUTH denotes credential trouble and begins response text in brackets after the status space, with CRLF framing. | TestResponseCodeCredentialFailures |
 | POP3-RESP-CODES-03 | RFC 3206 §6 | SHOULD | Every credential-caused PASS failure carries AUTH (wrong password, unknown account, and the failure that earns a limiter ban), so CAPA lists parameterless AUTH-RESP-CODE exactly once in AUTHORIZATION and TRANSACTION. | TestResponseCodeAuthRespCodeCapability |
 | POP3-RESP-CODES-04 | RFC 3206 §4 | Normative | On a system failure after good credentials, PASS replies `-ERR [SYS/TEMP]` when the maildrop fails to load and `-ERR [SYS/PERM]` when the backend returns no Mailbox, never AUTH; no limiter failure is recorded and the session stays in AUTHORIZATION. | TestResponseCodeSystemFailures |
-| POP3-RESP-CODES-05 | RFC 2449 §8.1.2 | Normative | Backend-signalled maildrop contention after valid credentials returns -ERR [IN-USE] on PASS, for direct or wrapped ErrInUse from Authenticate or Messages; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeInUse |
+| POP3-RESP-CODES-05 | RFC 2449 §8.1.2 | Normative | Backend-signalled maildrop contention after valid credentials returns -ERR [IN-USE] on PASS, for direct or wrapped ErrInUse from Authenticate, AuthenticateUTF8 or Messages; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeInUse |
 | POP3-RESP-CODES-06 | RFC 2449 §8.1.1 | Normative | Backend-signalled login delay after valid credentials returns -ERR [LOGIN-DELAY] on PASS (never on USER), for direct or wrapped ErrLoginDelay from Authenticate; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeLoginDelay |
 | POP3-RESP-CODES-07 | RFC 3206 §4 | Normative | Backend-classified system failures from Authenticate or Messages return SYS/TEMP or SYS/PERM on PASS, directly or wrapped, never AUTH or private details; discard partial results, consume USER, retain AUTHORIZATION, and permit retry or QUIT without UPDATE. Authentication system failures neither record nor reset credential failures nor check bans. | TestResponseCodeBackendSystemFailures |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
@@ -259,12 +259,13 @@ remain credential failures under the backend contract.
 
 The IN-USE proof uses an explicit backend contract: `ErrInUse` (direct or
 wrapped with `%w`) means credentials have already been verified and another
-session owns the maildrop. Both `Authenticate` and `Messages` may report it.
+session owns the maildrop. `Authenticate`, `AuthenticateUTF8` and `Messages`
+may report it.
 The engine resets credential-failure history but neither records a failure nor
 checks for a ban. It discards partial mailbox/message results and consumes the
-pending USER. Eight wire cases cover the two reporting points, direct/wrapped
-errors, repeated contention, and either successful retry with the correct
-maildrop or AUTHORIZATION QUIT without UPDATE. Counters observe every backend
+pending USER. Each backend interface runs eight wire cases covering the two
+reporting points, direct/wrapped errors, repeated contention, and either
+successful retry with the correct maildrop or AUTHORIZATION QUIT without UPDATE. Counters observe every backend
 operation and limiter call. Actual exclusive locking/release remains a backend
 responsibility; unrelated backend errors and APOP/SASL remain outside this
 proof.
@@ -423,7 +424,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **87 mapped rows / 61 named wire tests**.
+The exact current PARTIAL inventory is **89 mapped rows / 64 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must

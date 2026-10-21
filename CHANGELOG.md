@@ -20,6 +20,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `LOGIN-DELAY` CAPA tag: the Backend's minimum in AUTHORIZATION (followed by
   `USER` when the delay varies per user) and the user's own value in
   TRANSACTION. Backends without them are unchanged. Checked by POP3-CAPA-05.
+
+- RFC 6856 `UTF8` support through the optional `UTF8Backend` interface: CAPA
+  advertises `UTF8`, the `UTF8` command is accepted in AUTHORIZATION state
+  (refused after login, reset by STLS), and `AuthenticateUTF8` receives the
+  client's mode so the backend can serve raw UTF-8 headers or downgrade them
+  (RFC 6857). A plain `Backend` keeps the old behavior: no `UTF8` in CAPA and
+  `-ERR Unknown command` for `UTF8`.
+
 - `ErrSystemTemporary` and `ErrSystemPermanent` let `Authenticate` and `Messages`
   classify login failures as `SYS/TEMP` or `SYS/PERM` (RFC 3206 §4), including
   wrapped errors. Authentication system failures preserve credential-failure

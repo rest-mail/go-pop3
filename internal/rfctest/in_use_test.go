@@ -61,6 +61,31 @@ func (l *inUseLimiter) check(t *testing.T, resets int32) {
 // contention. These are backend-signalled failures, not an engine lock proof.
 // checklist: POP3-RESP-CODES-05
 func TestResponseCodeInUse(t *testing.T) {
+	t.Run("Backend", func(t *testing.T) {
+		testResponseCodeInUse(t, false)
+	})
+	// AuthenticateUTF8 must receive the same response code and limiter
+	// treatment, while preserving UTF8 mode through subsequent retries.
+	t.Run("UTF8Backend", func(t *testing.T) {
+		testResponseCodeInUse(t, true)
+	})
+}
+
+type utf8InUseBackend struct{ *inUseBackend }
+
+func (b *utf8InUseBackend) Authenticate(_, _ string) (pop3.Mailbox, error) {
+	return nil, fmt.Errorf("Authenticate called instead of AuthenticateUTF8")
+}
+
+func (b *utf8InUseBackend) AuthenticateUTF8(user, pass string, utf8 bool) (pop3.Mailbox, error) {
+	if !utf8 {
+		return nil, fmt.Errorf("UTF8 mode lost")
+	}
+	return b.inUseBackend.Authenticate(user, pass)
+}
+
+func testResponseCodeInUse(t *testing.T, utf8 bool) {
+	t.Helper()
 	for _, duringAuth := range []bool{true, false} {
 		for _, wrapped := range []bool{false, true} {
 			for _, retry := range []bool{false, true} {
@@ -71,12 +96,16 @@ func TestResponseCodeInUse(t *testing.T) {
 						busyErr = fmt.Errorf("private backend lock detail: %w", busyErr)
 					}
 					b := &inUseBackend{busyErr: busyErr, duringAuth: duringAuth}
+					var backend pop3.Backend = b
+					if utf8 {
+						backend = &utf8InUseBackend{b}
+					}
 					l := &inUseLimiter{}
 					client, server := net.Pipe()
 					done := make(chan struct{})
 					go func() {
 						defer close(done)
-						pop3.NewSession(server, b, nil, l).Handle()
+						pop3.NewSession(server, backend, nil, l).Handle()
 					}()
 					t.Cleanup(func() {
 						_ = client.Close()
@@ -88,7 +117,15 @@ func TestResponseCodeInUse(t *testing.T) {
 					})
 					w := &wire{t: t, conn: client, reader: bufio.NewReader(client), done: done}
 					expect(t, w.line(), "+OK POP3 server ready")
-					commandErrorCapa(t, w)
+					if utf8 {
+						expect(t, w.cmd("CAPA"), "+OK Capability list follows")
+						for _, line := range []string{"USER", "TOP", "UIDL", "RESP-CODES", "AUTH-RESP-CODE", "PIPELINING", "UTF8", "."} {
+							expect(t, w.line(), line)
+						}
+						expect(t, w.cmd("UTF8"), "+OK UTF8 enabled")
+					} else {
+						commandErrorCapa(t, w)
+					}
 					var messages int32
 					for attempt := int32(1); attempt <= 2; attempt++ {
 						expect(t, w.cmd("USER alice"), "+OK")

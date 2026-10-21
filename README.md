@@ -38,8 +38,11 @@ so what the client downloads is exactly what you stored.
   password typed on its own, is logged only as `<unknown command redacted>`.
 - `CAPA` capability advertisement ([RFC 2449](https://www.rfc-editor.org/rfc/rfc2449)):
   `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
-  ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`, and
-  `LOGIN-DELAY` for a `LoginDelayBackend`.
+  ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`,
+  `LOGIN-DELAY` for a `LoginDelayBackend`, and
+  `UTF8` ([RFC 6856](https://www.rfc-editor.org/rfc/rfc6856)) when the backend
+  implements `UTF8Backend`: the `UTF8` command is accepted before login and
+  `AuthenticateUTF8` learns whether the client may receive raw UTF-8 headers.
 - Storage-agnostic `Backend`/`Mailbox` seam — mail can live anywhere.
 - Deferred deletes with correct RFC 1939 update state: `DELE` marks, `QUIT`
   commits, `RSET` unmarks.

@@ -40,10 +40,11 @@
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
 // UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus LOGIN-DELAY
-// when the Backend is a [LoginDelayBackend]. Every PASS failure caused by the
-// credentials carries the [AUTH] response code; a maildrop that cannot be
-// loaded after good credentials carries [SYS/TEMP] (or [SYS/PERM] for a backend
-// that returns no Mailbox), per RFC 3206 §4.
+// when the Backend is a [LoginDelayBackend] and UTF8 (RFC 6856) when it is
+// a [UTF8Backend]. Every PASS failure caused by the credentials carries
+// the [AUTH] response code; a maildrop that cannot be loaded after good credentials
+// carries [SYS/TEMP] (or [SYS/PERM] for a backend that returns no Mailbox), per
+// RFC 3206 §4.
 //
 // # Rate limiting
 //
@@ -154,6 +155,20 @@ type LoginDelayBackend interface {
 type LoginDelayMailbox interface {
 	Mailbox
 	LoginDelay() int
+}
+
+// UTF8Backend is an optional [Backend] extension for RFC 6856 internationalized
+// mail. When the Backend implements it, CAPA advertises UTF8 and the engine
+// accepts the UTF8 command in AUTHORIZATION state; a Backend without it never
+// sees either, and its clients keep the plain RFC 1939 behavior.
+type UTF8Backend interface {
+	Backend
+	// AuthenticateUTF8 replaces [Backend.Authenticate] for a UTF8Backend. utf8
+	// reports whether the client issued UTF8 before logging in. When it is
+	// false, RFC 6856 §3 forbids serving messages with raw UTF-8 headers, so the
+	// returned Mailbox must downgrade them (RFC 6857), and [Message.Size] must
+	// count the downgraded bytes that Retrieve returns.
+	AuthenticateUTF8(user, pass string, utf8 bool) (Mailbox, error)
 }
 
 // Mailbox is a single authenticated POP3 maildrop. Every method is scoped to the
