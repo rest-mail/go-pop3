@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked RFC 8314 §3.4 implicit-TLS closure proofs for TLS 1.2 and 1.3,
+  before and after login: QUIT and client close alerts receive a server
+  close_notify before TCP termination. The test distinguishes an alert from
+  bare TCP EOF. Tests only; no runtime change.
+
 - Deterministic server lifecycle proofs for recovery after an `Accept` error and
   a connection returned by `Accept` after shutdown: no lost limiter slot, no
   greeting or session for the late connection, and bounded server drain. Removes

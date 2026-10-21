@@ -6,9 +6,9 @@ behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
 behavior across AUTHORIZATION/TRANSACTION, plus selected RFC 2449 RESP-CODES
 and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-length support
 and separately labeled command-reader policy, plus the optional RFC 1939 §3
-autologout timer as this library implements it, plus RFC 8314 §3.1 implicit
-TLS. It is not an inventory of all applicable RFC requirements, a full
-conformance claim, or a coverage badge. A mapped row means
+autologout timer as this library implements it, plus RFC 8314 §§3.1, 3.4 implicit
+TLS and selected connection closure. It is not an inventory of all applicable RFC
+requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
 
@@ -149,15 +149,31 @@ free loopback port, so this is the one fixture that opens a socket; the client
 is a real TLS 1.3 client that verifies the temporary self-signed certificate.
 Client-certificate authentication (RFC 8314 §§4.2, 5.5) is not supported, so
 the "even if a client certificate was supplied" clause is shown only for
-connections without one. Not proven: §3.4 connection closure (close_notify),
-and a `POP3TLS` port configured with a nil TLS config, which today listens in
-plaintext.
+connections without one. Forced shutdown, error-path closure and a `POP3TLS`
+port configured with a nil TLS config (which today listens in plaintext) remain
+unproven. Selected normal closure proofs follow below.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | POP3-ITLS-01 | RFC 8314 §3.1 | Normative | Begin the TLS handshake immediately on connect; send the greeting and every reply only as TLS application data, never in the clear to a plaintext client. | TestImplicitTLSSession, TestImplicitTLSRejectsPlaintext |
 | POP3-ITLS-02 | RFC 8314 §3.1 | MUST | After the +OK greeting, enter AUTHORIZATION: refuse transaction commands until USER/PASS succeeds. | TestImplicitTLSSession |
 | POP3-ITLS-03 | RFC 8314 §3.1; RFC 2595 §4; RFC 2449 §5 | Normative | On an implicit-TLS connection, omit STLS from CAPA before and after authentication, refuse STLS as already active, and accept USER/PASS without STLS. | TestImplicitTLSSession |
+
+## RFC 8314 §3.4: selected implicit-TLS connection closure
+
+These proofs run through the public implicit-TLS listener with TLS 1.2 and 1.3,
+in AUTHORIZATION and TRANSACTION. A normal QUIT reply is followed by a decrypted
+TLS close_notify and then TCP EOF. A client can instead send its close_notify
+without QUIT or closing TCP: the server sends its own alert and terminates TCP.
+The client transport replaces bare TCP EOF with a distinct error, because Go's
+TLS reader otherwise accepts it at a record boundary; TLS EOF alone would not
+prove an alert was sent. Certificate and hostname verification stay enabled.
+Server cleanup drains sessions with bounded deadlines. No deletion, forced
+shutdown, failed-handshake, idle-timeout or STLS closure claim is made here.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-ITLS-04 | RFC 8314 §3.4 | SHOULD | Initiate TLS close alerts before TCP termination (tested after QUIT and in response to a client close alert, before and after authentication, with TLS 1.2 and 1.3). | TestImplicitTLSCloseNotify |
 
 ## RFC 2449 §6.6: selected PIPELINING requirements
 
