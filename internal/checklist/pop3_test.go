@@ -36,6 +36,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	idle := read("internal/rfctest/idle_test.go")
 	implicitTLS := read("internal/rfctest/implicit_tls_test.go")
 	tlsClosure := read("internal/rfctest/tls_closure_test.go")
+	stlsIdle := read("internal/rfctest/stls_idle_test.go")
 	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, implicitTLS, want string }{
 		{"valid", checklist, tests, authPipelining, sessionVector, implicitTLS, ""},
 		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, implicitTLS, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
@@ -82,6 +83,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "uidl_sessions_test.go"):   uidSessions,
 				filepath.Join(dir, "pass_immediate_test.go"):  passImmediate,
 				filepath.Join(dir, "idle_test.go"):            idle,
+				filepath.Join(dir, "stls_idle_test.go"):       stlsIdle,
 				filepath.Join(dir, "implicit_tls_test.go"):    tc.implicitTLS,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -91,7 +93,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "81 items (81 mapped to tests, 0 not applicable), 55 tests") {
+				if code != 0 || !strings.Contains(out.String(), "82 items (82 mapped to tests, 0 not applicable), 56 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -143,6 +145,7 @@ func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 		{"POP3-IDLE-04", "TestIdleTimeoutWithBufferedPartialCommand", "idle_test.go"},
 		{"POP3-IDLE-05", "TestIdlePreLoginTimeout", "idle_test.go"},
 		{"POP3-IDLE-06", "TestIdlePreLoginPartialCommandTimeout", "idle_test.go"},
+		{"POP3-IDLE-07", "TestIdleTimeoutAfterSTLS", "stls_idle_test.go"},
 	} {
 		var row string
 		for _, line := range strings.Split(string(checklist), "\n") {
