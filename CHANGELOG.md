@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked RFC 1939 pre-login timeout proofs for buffered partial USER/PASS
+  lines, with and without a trailing CR: no reply, authentication or mailbox
+  access before the session closes. Plaintext fixture only; no runtime change.
+
 - A CI-required comparison with Python 3.13's independent `poplib` client for
   selected plaintext POP3 commands, decoded message bytes/octet counts and
   QUIT versus disconnect deletion behavior. Python remains test-only and is
