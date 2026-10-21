@@ -93,7 +93,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "83 items (83 mapped to tests, 0 not applicable), 57 tests") {
+				if code != 0 || !strings.Contains(out.String(), "84 items (84 mapped to tests, 0 not applicable), 58 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -146,6 +146,7 @@ func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 		{"POP3-IDLE-05", "TestIdlePreLoginTimeout", "idle_test.go"},
 		{"POP3-IDLE-06", "TestIdlePreLoginPartialCommandTimeout", "idle_test.go"},
 		{"POP3-IDLE-07", "TestIdleTimeoutAfterSTLS", "stls_idle_test.go"},
+		{"POP3-IDLE-08", "TestIdleTimeoutAfterSTLSWithBufferedPartialCommand", "stls_idle_test.go"},
 	} {
 		var row string
 		for _, line := range strings.Split(string(checklist), "\n") {
