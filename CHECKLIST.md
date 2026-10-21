@@ -296,6 +296,13 @@ fragmented CRLF, and checks complete credential bytes at Authenticate, successfu
 authentication and subsequent response framing. This covers selected credential
 commands, not every command, capability-specific maximum or parser grammar.
 
+RFC 2449 §4 leaves the first line of a response, including the greeting, at
+512 octets including CRLF. POP3-LENGTH-02 sends a maximum-length line for each
+keyword in each state, mostly with out-of-range or extra arguments, and checks
+that every status line stays within that limit. Status text is fixed by the
+library and never echoes the command. Negative control: echoing the line in the
+unknown-command error fails the test at 1044 octets.
+
 The POLICY rows describe the existing 1024-byte bounded reader, including LF.
 Acceptance beyond 255, non-ASCII credential bytes and bare LF are implementation
 controls, not claims of RFC-conforming client syntax. A buffer of 1024 bytes
@@ -308,6 +315,7 @@ library-policy rows; it does not make the policy an RFC requirement.
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | POP3-LENGTH-01 | RFC 2449 §§3–4 | MUST | Support 255-octet command lines including CRLF (proved for USER/PASS with complete credentials, including fragmented delivery). | TestCommandLength255Credentials |
+| POP3-LENGTH-02 | RFC 2449 §4 | Normative | Keep the first line of every response, including the greeting, within 512 octets including CRLF: maximum-length (255-octet) commands for every keyword in AUTHORIZATION and TRANSACTION, and a 1023-octet unknown command under the reader policy, each receive a bounded status line. | TestResponseFirstLineLimit |
 | POP3-LENGTH-POLICY-01 | Library policy (session.go bounded reader) | Normative | Accept complete 1024-byte USER/PASS lines including LF, preserving credential bytes; count UTF-8 bytes rather than runes. | TestCommandLengthPolicy1024Accepted |
 | POP3-LENGTH-POLICY-02 | Library policy (session.go bounded reader) | Normative | Refuse a 1024-byte buffer without LF with one error then close; do not authenticate or resynchronize a 1025-byte complete line or queued command. | TestCommandLengthPolicyOverflowCloses |
 

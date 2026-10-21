@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- POP3-LENGTH-02 (`TestResponseFirstLineLimit`) proves RFC 2449 §4: the first
+  response line, including the greeting, stays within 512 octets for
+  maximum-length commands in both states.
 - `ErrSystemTemporary` and `ErrSystemPermanent` let `Authenticate` and `Messages`
   classify login failures as `SYS/TEMP` or `SYS/PERM` (RFC 3206 §4), including
   wrapped errors. Authentication system failures preserve credential-failure
