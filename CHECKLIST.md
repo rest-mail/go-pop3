@@ -6,16 +6,18 @@ behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
 behavior across AUTHORIZATION/TRANSACTION, plus selected RFC 2449 RESP-CODES
 and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-length support
 and separately labeled command-reader policy, plus the optional RFC 1939 §3
-autologout timer as this library implements it. It is not an inventory of all applicable
-RFC requirements, a full conformance claim, or a coverage badge. A mapped row means
+autologout timer as this library implements it, plus RFC 8314 §3.1 implicit
+TLS. It is not an inventory of all applicable RFC requirements, a full
+conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
 
 Requirements below paraphrase the primary texts:
 [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt),
 [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt),
-[RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt), and
-[RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt).
+[RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt),
+[RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt), and
+[RFC 8314](https://www.rfc-editor.org/rfc/rfc8314.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
@@ -138,6 +140,24 @@ universal RFC mandates. Nil TLS configuration permits plaintext authentication.
 | POP3-STLS-06 | RFC 2595 §4 | Normative | Permit STLS only in AUTHORIZATION; refuse it in TRANSACTION and exercise the permitted refusal when TLS is already active. | TestSTLSStates |
 | POP3-TLS-POLICY-01 | RFC 2595 §§2.5, 4 (library policy) | Normative | With TLS configured, refuse plaintext USER/PASS without calling backend authentication; accept valid credentials through TLS exactly once. | TestSTLSCredentials |
 | POP3-TLS-POLICY-02 | RFC 2595 §2.5 (library policy) | Normative | Close after a malformed TLS record header during STLS negotiation without calling backend authentication. | TestSTLSHandshakeFailure |
+
+## RFC 8314 §3.1: implicit TLS ("pop3s")
+
+These proofs start a Server through the public `ListenAndServe` with only the
+`POP3TLS` listener, the way the gateway serves port 995. The test reserves a
+free loopback port, so this is the one fixture that opens a socket; the client
+is a real TLS 1.3 client that verifies the temporary self-signed certificate.
+Client-certificate authentication (RFC 8314 §§4.2, 5.5) is not supported, so
+the "even if a client certificate was supplied" clause is shown only for
+connections without one. Not proven: §3.4 connection closure (close_notify),
+and a `POP3TLS` port configured with a nil TLS config, which today listens in
+plaintext.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-ITLS-01 | RFC 8314 §3.1 | Normative | Begin the TLS handshake immediately on connect; send the greeting and every reply only as TLS application data, never in the clear to a plaintext client. | TestImplicitTLSSession, TestImplicitTLSRejectsPlaintext |
+| POP3-ITLS-02 | RFC 8314 §3.1 | MUST | After the +OK greeting, enter AUTHORIZATION: refuse transaction commands until USER/PASS succeeds. | TestImplicitTLSSession |
+| POP3-ITLS-03 | RFC 8314 §3.1; RFC 2595 §4; RFC 2449 §5 | Normative | On an implicit-TLS connection, omit STLS from CAPA before and after authentication, refuse STLS as already active, and accept USER/PASS without STLS. | TestImplicitTLSSession |
 
 ## RFC 2449 §6.6: selected PIPELINING requirements
 

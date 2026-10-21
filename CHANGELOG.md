@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Checked RFC 8314 §3.1 implicit-TLS ("pop3s") proofs through the public
+  `ListenAndServe`: TLS before the greeting, nothing sent in the clear to a
+  plaintext client, AUTHORIZATION after the greeting, no STLS offered or
+  accepted, and USER/PASS without STLS. Also tests `ListenAndServe` on a port
+  already in use. Tests only; no runtime change.
+
 - Checked RFC 1939 pre-login timeout proofs for buffered partial USER/PASS
   lines, with and without a trailing CR: no reply, authentication or mailbox
   access before the session closes. Plaintext fixture only; no runtime change.
