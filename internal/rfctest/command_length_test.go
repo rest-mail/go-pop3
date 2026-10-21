@@ -188,3 +188,71 @@ func TestCommandLengthPolicyOverflowCloses(t *testing.T) {
 		})
 	}
 }
+
+// fill pads a command to size octets including CRLF with a repeated digit,
+// so numeric arguments stay syntactically numeric but out of range.
+func fill(t *testing.T, prefix string, size int) string {
+	t.Helper()
+	line := prefix + strings.Repeat("9", size-2-len(prefix))
+	if len(line+"\r\n") != size {
+		t.Fatalf("fixture %q... is %d octets, want %d", prefix, len(line+"\r\n"), size)
+	}
+	return line
+}
+
+// RFC 2449 §4 raises the command limit to 255 octets but keeps the first line
+// of every response, including the greeting, at 512 octets including CRLF.
+// Each command here is a maximum-length line in its state; the 1023-octet
+// unknown command is the bounded reader's policy limit. wire.line rejects any
+// line longer than 512 octets or lacking CRLF.
+// checklist: POP3-LENGTH-02
+func TestResponseFirstLineLimit(t *testing.T) {
+	w := connect(t, backend{password: "secret"})
+	authorization := []struct{ command, status string }{
+		{fill(t, "XYZW ", 255), "-ERR"},
+		{fill(t, "CAPA ", 255), "-ERR"},
+		{fill(t, "STAT ", 255), "-ERR"},
+		{fill(t, "LIST ", 255), "-ERR"},
+		{fill(t, "RETR ", 255), "-ERR"},
+		{fill(t, "TOP ", 255), "-ERR"},
+		{fill(t, "UIDL ", 255), "-ERR"},
+		{fill(t, "DELE ", 255), "-ERR"},
+		{fill(t, "STLS ", 255), "-ERR"},
+		{fill(t, "APOP alice ", 255), "-ERR"},
+		{fill(t, "PASS ", 255), "-ERR"},
+		{fill(t, "USER ", 255), "+OK"},
+		{fill(t, "PASS ", 255), "-ERR"},
+		{fill(t, "XYZW ", 1023), "-ERR"},
+	}
+	for _, tc := range authorization {
+		w.status(w.cmd(tc.command), tc.status)
+	}
+	w.login("secret")
+	transaction := []struct{ command, status string }{
+		{fill(t, "XYZW ", 255), "-ERR"},
+		{fill(t, "STAT ", 255), "-ERR"},
+		{fill(t, "LIST ", 255), "-ERR"},
+		{fill(t, "RETR ", 255), "-ERR"},
+		{fill(t, "TOP ", 255), "-ERR"},
+		{fill(t, "TOP 1 ", 255), "-ERR"},
+		{fill(t, "UIDL ", 255), "-ERR"},
+		{fill(t, "DELE ", 255), "-ERR"},
+		{fill(t, "NOOP ", 255), "-ERR"},
+		{fill(t, "RSET ", 255), "-ERR"},
+		{fill(t, "CAPA ", 255), "-ERR"},
+		{fill(t, "STLS ", 255), "-ERR"},
+		{fill(t, "USER ", 255), "-ERR"},
+		{fill(t, "PASS ", 255), "-ERR"},
+		{fill(t, "XYZW ", 1023), "-ERR"},
+	}
+	for _, tc := range transaction {
+		w.status(w.cmd(tc.command), tc.status)
+	}
+	if got := w.cmd("STAT"); got != "+OK 1 42" {
+		t.Fatalf("framing probe after long commands = %q", got)
+	}
+	if got := w.cmd("QUIT"); got != "+OK POP3 server signing off" {
+		t.Fatalf("QUIT = %q", got)
+	}
+	lengthClosed(t, w)
+}
