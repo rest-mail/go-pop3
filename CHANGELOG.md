@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Backends may return `ErrLoginDelay` (including wrapped errors) from
+  `Authenticate` after verifying credentials to refuse a login that comes too
+  soon after the last one. PASS replies `-ERR [LOGIN-DELAY]` (RFC 2449 §8.1.1),
+  consumes the pending USER, stays in AUTHORIZATION and resets
+  credential-failure history without recording a failure or checking for a ban.
+  USER never carries the code. Checked by POP3-RESP-CODES-06.
+
 - Backends may return `ErrInUse` (including wrapped errors) from `Authenticate`
   or `Messages` after verifying credentials to report an already-open maildrop.
   PASS replies `-ERR [IN-USE]` (RFC 2449 §8.1.2), consumes the pending USER,

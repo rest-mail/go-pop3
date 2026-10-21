@@ -288,6 +288,13 @@ func (s *Session) handlePass(arg string) {
 		s.err("[IN-USE] Maildrop already in use")
 		return
 	}
+	if errors.Is(err, ErrLoginDelay) {
+		// Like ErrInUse, the credentials were valid: logging in too soon is a
+		// backend policy refusal, not an authentication failure.
+		s.limiter.ResetAuth(ip)
+		s.err("[LOGIN-DELAY] Logged in too recently")
+		return
+	}
 	if err != nil {
 		slog.Warn("pop3: auth failed",
 			"remote", s.conn.RemoteAddr(),

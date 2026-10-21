@@ -248,6 +248,7 @@ interface cannot yet classify its own errors.
 | POP3-RESP-CODES-03 | RFC 3206 §6 | SHOULD | Every credential-caused PASS failure carries AUTH (wrong password, unknown account, and the failure that earns a limiter ban), so CAPA lists parameterless AUTH-RESP-CODE exactly once in AUTHORIZATION and TRANSACTION. | TestResponseCodeAuthRespCodeCapability |
 | POP3-RESP-CODES-04 | RFC 3206 §4 | Normative | On a system failure after good credentials, PASS replies `-ERR [SYS/TEMP]` when the maildrop fails to load and `-ERR [SYS/PERM]` when the backend returns no Mailbox, never AUTH; no limiter failure is recorded and the session stays in AUTHORIZATION. | TestResponseCodeSystemFailures |
 | POP3-RESP-CODES-05 | RFC 2449 §8.1.2 | Normative | Backend-signalled maildrop contention after valid credentials returns -ERR [IN-USE] on PASS, for direct or wrapped ErrInUse from Authenticate or Messages; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeInUse |
+| POP3-RESP-CODES-06 | RFC 2449 §8.1.1 | Normative | Backend-signalled login delay after valid credentials returns -ERR [LOGIN-DELAY] on PASS (never on USER), for direct or wrapped ErrLoginDelay from Authenticate; ignore partial results, clear USER, retain AUTHORIZATION without a limiter failure/ban check, and permit fresh login or QUIT. | TestResponseCodeLoginDelay |
 | POP3-RESP-POLICY-01 | RFC 3206 §5 (library policy) | Normative | Accept USER identically for known and unknown accounts; use the same generic AUTH failure reply for wrong passwords and unknown accounts. | TestResponseCodeCredentialFailures |
 | POP3-RESP-POLICY-02 | RFC 1939 §§4, 7 (library policy) | Normative | After a credential failure, reject PASS without a fresh USER, retain AUTHORIZATION, and permit successful USER/PASS with usable STAT/NOOP. | TestResponseCodeAuthenticationRetry |
 | POP3-RESP-POLICY-03 | RFC 1939 §4; RFC 3206 §5 (library policy) | Normative | With valid credentials but maildrop enumeration failure, reply with -ERR [SYS/TEMP] without AUTH or backend details; clear USER, refuse transaction access, and permit another attempt and QUIT. | TestResponseCodeMaildropFailure |
@@ -261,8 +262,17 @@ pending USER. Eight wire cases cover the two reporting points, direct/wrapped
 errors, repeated contention, and either successful retry with the correct
 maildrop or AUTHORIZATION QUIT without UPDATE. Counters observe every backend
 operation and limiter call. Actual exclusive locking/release remains a backend
-responsibility; unrelated backend errors, LOGIN-DELAY and APOP/SASL remain
-outside this proof.
+responsibility; unrelated backend errors and APOP/SASL remain outside this
+proof.
+
+The LOGIN-DELAY proof uses the same shape: `ErrLoginDelay` (direct or wrapped)
+from `Authenticate` means credentials were verified but the user logged in too
+recently. PASS replies `-ERR [LOGIN-DELAY]`; USER always replies `+OK`, as RFC
+2449 §8.1.1 recommends, so the code never reveals that an account exists before
+its password is checked. Four wire cases cover direct/wrapped errors, repeated
+refusal, and either successful retry or AUTHORIZATION QUIT without UPDATE.
+Tracking login times and choosing the delay remain the backend's job. The
+optional `LOGIN-DELAY` CAPA tag (RFC 2449 §6.5) is not announced yet.
 
 ## RFC 2449 §§3–4: selected command-length support and library policy
 
@@ -396,7 +406,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **85 mapped rows / 59 named wire tests**.
+The exact current PARTIAL inventory is **87 mapped rows / 61 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -505,7 +515,7 @@ crash recovery and maildrop lifetime/global UID generation/non-reuse,
 remaining TLS/STLS vectors and configuration variants, AUTH/APOP/SASL,
 remaining PIPELINING vectors (including other AUTHORIZATION sequences, TLS
 and transport-window handling), remaining RESP-CODES semantics (including
-hierarchical/unknown-code client handling, LOGIN-DELAY, production maildrop-lock
+hierarchical/unknown-code client handling, the LOGIN-DELAY CAPA tag, production maildrop-lock
 integration and backend-classified SYS/TEMP versus SYS/PERM), the full RFC 3206 credential-error
 contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration variations,
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
