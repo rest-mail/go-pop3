@@ -35,6 +35,7 @@ type Session struct {
 
 	// Session state
 	usingTLS bool
+	utf8     bool // client issued UTF8 (RFC 6856); reset by STLS
 	auth     *authState
 	mailbox  Mailbox
 	messages []Message
@@ -133,6 +134,10 @@ func (s *Session) Handle() {
 			if !s.rejectArg(arg) && s.handleSTLS() {
 				return
 			}
+		case "UTF8":
+			if !s.rejectArg(arg) {
+				s.handleUTF8()
+			}
 		case "USER":
 			s.handleUser(arg)
 		case "PASS":
@@ -201,7 +206,26 @@ func (s *Session) handleCapa() {
 	s.sendLine("RESP-CODES")
 	s.sendLine("AUTH-RESP-CODE")
 	s.sendLine("PIPELINING")
+	if _, ok := s.backend.(UTF8Backend); ok {
+		s.sendLine("UTF8")
+	}
 	s.sendLine(".")
+}
+
+// handleUTF8 enables UTF-8 mode (RFC 6856 §3.1). The command is valid only in
+// AUTHORIZATION state, and only when the Backend can serve both forms of a
+// message; otherwise it is as unknown as before the extension existed.
+func (s *Session) handleUTF8() {
+	if _, ok := s.backend.(UTF8Backend); !ok {
+		s.err("Unknown command")
+		return
+	}
+	if s.auth.authenticated {
+		s.err("Command only valid before authentication")
+		return
+	}
+	s.utf8 = true
+	s.ok("UTF8 enabled")
 }
 
 func (s *Session) handleSTLS() bool {
@@ -238,6 +262,9 @@ func (s *Session) handleSTLS() bool {
 	s.reader = bufio.NewReaderSize(tlsConn, maxCommandLine)
 	s.writer = bufio.NewWriter(tlsConn)
 	s.usingTLS = true
+	// Like the capability list (RFC 2595 §4), a mode the client chose before
+	// TLS is not trusted afterwards: it must issue UTF8 again.
+	s.utf8 = false
 
 	slog.Info("pop3: TLS established", "remote", s.conn.RemoteAddr())
 	return false
@@ -280,7 +307,13 @@ func (s *Session) handlePass(arg string) {
 
 	ip := extractIP(s.conn.RemoteAddr().String())
 
-	mailbox, err := s.backend.Authenticate(username, arg)
+	var mailbox Mailbox
+	var err error
+	if b, ok := s.backend.(UTF8Backend); ok {
+		mailbox, err = b.AuthenticateUTF8(username, arg, s.utf8)
+	} else {
+		mailbox, err = s.backend.Authenticate(username, arg)
+	}
 	if errors.Is(err, ErrInUse) {
 		// ErrInUse is a backend assertion that the credentials were valid;
 		// contention must not earn an authentication-failure ban.
