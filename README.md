@@ -137,6 +137,12 @@ recording an authentication failure or checking for a ban. Partial results are
 ignored. The backend must acquire and release maildrop locks itself; the engine
 does not implement locking. Use `ErrInUse` only after credentials are verified.
 
+Likewise, `Authenticate` may return `pop3.ErrLoginDelay` (directly or wrapped)
+after verifying credentials to refuse a login that comes too soon after the
+last one. PASS then replies `-ERR [LOGIN-DELAY]` and permits a later USER/PASS
+attempt without counting an authentication failure. The backend tracks login
+times and chooses the delay.
+
 ## Server
 
 `NewServer(backend, tlsConfig, limiter)` builds a `Server`. `ListenAndServe`

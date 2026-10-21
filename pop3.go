@@ -122,8 +122,10 @@ type Backend interface {
 	// rejects the login (the client sees "-ERR ...") and counts as an auth
 	// failure against the [Limiter], except for [ErrInUse], which reports valid
 	// credentials but an already-open maildrop and receives [IN-USE] instead of
-	// [AUTH]. Wrapped ErrInUse errors are recognized with errors.Is. On success
-	// it returns the [Mailbox] the session operates on.
+	// [AUTH], and [ErrLoginDelay], which reports valid credentials used too soon
+	// after the last login and receives [LOGIN-DELAY]. Wrapped errors are
+	// recognized with errors.Is. On success it returns the [Mailbox] the session
+	// operates on.
 	Authenticate(user, pass string) (Mailbox, error)
 }
 

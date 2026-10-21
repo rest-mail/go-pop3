@@ -38,6 +38,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	tlsClosure := read("internal/rfctest/tls_closure_test.go")
 	stlsIdle := read("internal/rfctest/stls_idle_test.go")
 	inUse := read("internal/rfctest/in_use_test.go")
+	loginDelay := read("internal/rfctest/login_delay_test.go")
 	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, implicitTLS, want string }{
 		{"valid", checklist, tests, authPipelining, sessionVector, implicitTLS, ""},
 		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, implicitTLS, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
@@ -70,6 +71,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			for path, content := range map[string]string{
 				file:                                 tc.checklist,
 				filepath.Join(dir, "in_use_test.go"): inUse,
+				filepath.Join(dir, "login_delay_test.go"):     loginDelay,
 				filepath.Join(dir, "tls_closure_test.go"):     tlsClosure,
 				filepath.Join(dir, "authorization_test.go"):   tc.tests,
 				filepath.Join(dir, "transaction_test.go"):     transaction,
@@ -95,7 +97,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "86 items (86 mapped to tests, 0 not applicable), 60 tests") {
+				if code != 0 || !strings.Contains(out.String(), "87 items (87 mapped to tests, 0 not applicable), 61 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
@@ -139,6 +141,7 @@ func TestPOP3UIDLSessionChecklistMutations(t *testing.T) {
 	}
 	for _, proof := range []struct{ id, test, file string }{
 		{"POP3-RESP-CODES-05", "TestResponseCodeInUse", "in_use_test.go"},
+		{"POP3-RESP-CODES-06", "TestResponseCodeLoginDelay", "login_delay_test.go"},
 		{"POP3-ITLS-04", "TestImplicitTLSCloseNotify", "tls_closure_test.go"},
 		{"POP3-UIDL-05", "TestUIDLSequentialSessionsDeleteAndAppend", "uidl_sessions_test.go"},
 		{"POP3-UIDL-06", "TestUIDLSequentialSessionsWithoutUpdate", "uidl_sessions_test.go"},
