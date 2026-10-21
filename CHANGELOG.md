@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- RFC 6856 `UTF8` support through the optional `UTF8Backend` interface: CAPA
+  advertises `UTF8`, the `UTF8` command is accepted in AUTHORIZATION state
+  (refused after login, reset by STLS), and `AuthenticateUTF8` receives the
+  client's mode so the backend can serve raw UTF-8 headers or downgrade them
+  (RFC 6857). A plain `Backend` keeps the old behavior: no `UTF8` in CAPA and
+  `-ERR Unknown command` for `UTF8`.
+
 - Checked RFC 1939 §3 autologout proof for partial commands after STLS
   (POP3-IDLE-08): a genuine timeout below TLS while an encrypted USER, PASS or
   QUIT without its LF is buffered closes with only close_notify, never
