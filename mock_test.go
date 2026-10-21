@@ -132,8 +132,14 @@ type pop3Harness struct {
 
 func newPOP3Harness(t *testing.T, mock *mockBackend) *pop3Harness {
 	t.Helper()
+	return newPOP3HarnessFor(t, mock, mock)
+}
+
+// newPOP3HarnessFor serves backend, which wraps mock for the login helper.
+func newPOP3HarnessFor(t *testing.T, backend Backend, mock *mockBackend) *pop3Harness {
+	t.Helper()
 	client, server := net.Pipe()
-	sess := NewSession(server, mock, nil, NopLimiter{})
+	sess := NewSession(server, backend, nil, NopLimiter{})
 
 	done := make(chan struct{})
 	go func() {
