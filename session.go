@@ -22,6 +22,14 @@ import (
 // reader's buffer is sized to this cap; see [Session.readCommandLine].
 const maxCommandLine = 1024
 
+// maxSASLResponseLine bounds the AUTH response line read after the "+ "
+// challenge, including its CRLF. RFC 5034 §4 lifts the command-line limit for
+// that line: a server MUST handle the largest response its mechanisms
+// generate. For PLAIN, RFC 4616 §2 requires authzid, authcid and passwd of up
+// to 255 octets each, so the message is at most 767 octets: 1024 base64
+// characters plus CRLF.
+const maxSASLResponseLine = 4*((3*255+2+2)/3) + 2
+
 // errLineTooLong reports that a command line exceeded [maxCommandLine] bytes
 // without a terminating LF.
 var errLineTooLong = errors.New("command line too long")
@@ -196,6 +204,28 @@ func (s *Session) readCommandLine() (string, error) {
 		return "", err
 	}
 	return string(line), nil
+}
+
+// readSASLResponseLine reads the AUTH response line that follows a "+ "
+// challenge, refusing more than [maxSASLResponseLine] bytes. It continues past
+// the reader's [maxCommandLine] buffer, so memory stays bounded by the two caps
+// together.
+func (s *Session) readSASLResponseLine() (string, error) {
+	var line []byte
+	for {
+		chunk, err := s.reader.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > maxSASLResponseLine {
+			return "", errLineTooLong
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		return string(line), nil
+	}
 }
 
 func (s *Session) handleCapa() {
@@ -387,7 +417,7 @@ func (s *Session) handleAuth(arg string) bool {
 	}
 	if !initial {
 		s.write("+ \r\n")
-		line, err := s.readCommandLine()
+		line, err := s.readSASLResponseLine()
 		if errors.Is(err, errLineTooLong) {
 			s.err("Command line too long")
 			return true
@@ -406,6 +436,12 @@ func (s *Session) handleAuth(arg string) bool {
 	// does not decode rejects the command.
 	if response == "=" {
 		response = ""
+	}
+	// encoding/base64 skips CR and LF, but RFC 5034 §4 says to reject any
+	// character outside the base64 alphabet rather than ignore it.
+	if strings.ContainsAny(response, "\r\n") {
+		s.err("Invalid base64 response")
+		return false
 	}
 	decoded, err := base64.StdEncoding.DecodeString(response)
 	if err != nil {

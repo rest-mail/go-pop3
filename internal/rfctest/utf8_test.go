@@ -71,7 +71,7 @@ func TestUTF8CapabilityBothStates(t *testing.T) {
 // RFC 6856 §2.1: UTF8 takes no parameters and is valid only in AUTHORIZATION
 // state. A refused UTF8 leaves the session in ASCII mode, and the backend sees
 // whether UTF-8 mode was enabled before the login.
-// checklist: POP3-UTF8-02 POP3-UTF8-03
+// checklist: POP3-UTF8-02 POP3-UTF8-03 POP3-UTF8-11
 func TestUTF8CommandStates(t *testing.T) {
 	t.Run("enabled", func(t *testing.T) {
 		b := &utf8Backend{}
