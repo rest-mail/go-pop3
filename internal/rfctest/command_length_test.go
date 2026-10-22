@@ -86,7 +86,7 @@ func lengthClosed(t *testing.T, w *wire) {
 
 // RFC 2449 §4 increases RFC 1939's argument limits. Both complete commands
 // are exactly 255 octets: four keyword bytes, SP, 248 argument bytes, CRLF.
-// checklist: POP3-LENGTH-01
+// checklist: POP3-LENGTH-01 POP3-LENGTH-03
 func TestCommandLength255Credentials(t *testing.T) {
 	user := strings.Repeat("u", 247) + "U"
 	pass := strings.Repeat("p", 247) + "P"

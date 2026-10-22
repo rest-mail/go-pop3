@@ -129,6 +129,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **AUTH PLAIN rejected the largest valid response.** RFC 5034 §4 requires a
+  server to handle the largest response its mechanisms generate. PLAIN with
+  255-octet authzid, authcid and password (RFC 4616 §2) is 1024 base64
+  characters, but the line after the `+ ` challenge was capped at 1024 octets
+  including CRLF, so it was refused and the session closed. That line is now
+  capped at 1026 octets. Checked by POP3-SASL-08.
+
+- **AUTH PLAIN accepted a bare CR inside a base64 response.** Go's
+  `encoding/base64` skips CR and LF, so `AHVz\rZXI...` decoded and could log
+  in. RFC 5034 §4 says to reject any character outside the base64 alphabet;
+  such a response now gets `-ERR Invalid base64 response`. Checked by
+  POP3-SASL-09.
+
 - **`TOP` of a message with an empty header section.** A message that begins with
   an empty line has no header fields (RFC 5322 §2.1), but `TOP` treated its whole
   body as header lines: `TOP n 0` sent every body line plus a stray blank line.

@@ -622,7 +622,7 @@ server challenges with data, security layers and the success data of
 | POP3-SASL-05 | RFC 5034 §4; RFC 4616 §2 | Normative | Refuse an unknown or missing mechanism, an empty initial response (`=`), and a PLAIN message without exactly three fields, with an empty authcid or password, or that is not UTF-8, without calling the Backend; a fresh AUTH can then succeed. | TestSASLPlainRejections |
 | POP3-SASL-06 | RFC 3206 §5; RFC 5034 §4 | Normative | A credential failure, including an authzid the Backend refuses, replies `-ERR [AUTH]`, is recorded with the Limiter like a failed PASS, and the failure that earns a ban replies `-ERR [AUTH] Too many authentication failures` and closes the session. | TestSASLPlainCredentialFailures |
 | POP3-SASL-07 | RFC 5034 §6; RFC 4616 §5; RFC 2595 §2.2 | Normative | With a TLS config, refuse AUTH before STLS like USER (`-ERR TLS required`, no Backend call, with or without initial response) so PLAIN never carries a password in the clear; after STLS it succeeds. | TestSASLPlainRequiresTLS |
-| POP3-SASL-POLICY-01 | Library policy (session.go AUTH response line) | Normative | The response line after the `+ ` challenge obeys the 1024-octet command-line cap: an over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |
+| POP3-SASL-POLICY-01 | Library policy (session.go AUTH response line) | Normative | The response line after the `+ ` challenge is capped at the largest PLAIN response, 1026 octets with CRLF (POP3-SASL-08): an unterminated over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |
 
 ## RFC 6856: UTF8 and the remaining optional authentication commands
 
@@ -651,9 +651,9 @@ Negative control: with the `s.utf8 = false` reset after STLS removed from
 `session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
 utf8=true.
 
-This section is still not a complete inventory. RFC 1939 and RFC 2449 have had
-a line-by-line pass (see the audit records below); RFC 2595, 3206, 4616, 5034,
-6856 and 8314 have not, so the checklist stays PARTIAL.
+This section is still not a complete inventory. RFC 1939, 2449, 2595, 5034 and
+6856 have had a line-by-line pass (see the audit records below); RFC 3206, 4616
+and 8314 have not, so the checklist stays PARTIAL.
 
 ## RFC 1939: line-by-line audit additions
 
@@ -713,10 +713,86 @@ which now name them.
 | POP3-LDELAY-03 | RFC 2449 §6.5 | SHOULD | When the delay varies per user, append `USER` to LOGIN-DELAY in AUTHORIZATION and announce the user's own value in TRANSACTION. | TestCapaLoginDelay |
 | POP3-LDELAY-01 | RFC 2449 §6.5 | SHOULD | A server that advertises LOGIN-DELAY enforces it. | n/a: host duty. The Backend refuses an early login with ErrLoginDelay; the engine's reply is POP3-RESP-CODES-06. |
 | POP3-LDELAY-02 | RFC 2449 §6.5 | MUST | When the delay varies per user, announce in AUTHORIZATION the largest value that could apply to any user. | n/a: host duty. The value comes from LoginDelayBackend.LoginDelay and is announced unchanged (POP3-CAPA-05). |
-| POP3-LENGTH-03 | RFC 2449 §4 | MUST | Support the largest command length that any supported capability specifies. | n/a: no capability this library announces specifies more than 255 octets (POP3-LENGTH-01); the AUTH response line is read up to the 1024-octet cap (POP3-SASL-POLICY-01). |
+| POP3-LENGTH-03 | RFC 2449 §4; RFC 5034 §4 | MUST | Support the largest command length that any supported capability specifies. Re-checked against RFC 5034 §4 on 2026-10-22: AUTH with an initial response keeps the 255-octet command limit (POP3-LENGTH-01), but a response line after the `+ ` challenge may be as long as the mechanism needs, so the largest PLAIN response (1026 octets with CRLF) is accepted. | TestCommandLength255Credentials, TestRFC5034LargestPlainResponse |
 | POP3-CAPA-13 | RFC 2449 §5 | MUST | A capability description documents the states it is announced in, where its commands are valid, and whether its argument can change after login. | n/a: duty on capability specifications, not on servers. |
 | POP3-CAPA-14 | RFC 2449 §5 | SHOULD | A capability tag for a command is identical to the command keyword. | n/a: duty on capability specifications. The tags this library announces (TOP, UIDL, USER, STLS, UTF8) already match their keywords. |
 | POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. | n/a: EXPIRE is not announced (POP3-CAPA-09). |
 | POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 clients MAY assume an implicit DELE for each downloaded message. | n/a: host retention policy has no Backend API, and EXPIRE is not announced (POP3-CAPA-09). |
 | POP3-CLIENT-01 | RFC 2449 §§5, 6.5, 6.6, 6.9, 7, 8 | MUST | Client duties: reissue CAPA after an integrity layer, use LOGIN-DELAY for check intervals, track pipelined commands and stay within the TCP window, never change behavior on IMPLEMENTATION, never require an extension for basic function, and ignore unknown response-code detail. | n/a: client duties. This library is a server only. |
 | POP3-IANA-01 | RFC 2449 §9 | MUST | New capabilities and response codes are defined in an RFC with the listed details; new capability names never begin with `X`. | n/a: registration duty. The library announces only registered capabilities and codes (exact lists in POP3-CAPA-11 and POP3-RESP-CODES-*). |
+
+## RFC 2595: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 2595 was read line by line, §§1–10 and
+Appendix A, for every RFC 2119 keyword (REQUIRED, MUST, MUST NOT, SHOULD, MAY).
+Each one was matched to a row above or added below. Already covered: §4 STLS
+arguments, state, the handshake after the `+OK` CRLF, staying in AUTHORIZATION
+with client certificates, the permitted `-ERR` when TLS is active, and
+different capabilities after STLS (POP3-STLS-01 to 08); the §4 client cache
+duty (POP3-STLS-09). §3 (IMAP) and §5 (ACAP) do not apply to POP3. §6 PLAIN is
+obsoleted by RFC 4616 and is recorded once below; RFC 8314 updates the §2.1
+cipher mandate. The rows below are what the pass found missing. No code bug
+was found in RFC 2595 itself.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-STLS-10 | RFC 2595 §2.1 | REQUIRED | Implement the TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA cipher suite. | n/a: obsolete. Cipher suites come from the host's `tls.Config` and Go's crypto/tls, which has no DSS suites; RFC 8314 updates RFC 2595 and its §4 sets the current TLS requirements. |
+| POP3-STLS-11 | RFC 2595 §2.2 | SHOULD | Offer a privacy mode that refuses authentication until encryption is active: with a TLS config, USER and AUTH PLAIN are refused before STLS with no Backend call, and succeed after it. TLS cannot be turned off once started, so the "terminate if deactivated" case cannot arise. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
+| POP3-STLS-12 | RFC 2595 §2.2 | SHOULD | Offer a backward-compatible mode needing only the base protocol's mechanisms: with no TLS config, plaintext USER/PASS logs in. | TestAuthorizationUserPass |
+| POP3-STLS-13 | RFC 2595 §2.3 | MUST | Be configurable to refuse every clear-text login command and mechanism unless encryption is active: a TLS config refuses USER (so PASS has nothing to complete) and AUTH PLAIN with or without an initial response. APOP is not implemented. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
+| POP3-STLS-14 | RFC 2595 §2.3 | SHOULD | A server that allows clear-text logins can refuse them for the whole server and per user. | n/a: known gap. The whole-server switch is the TLS config (POP3-STLS-13). Per user needs the Backend to know whether the session is encrypted, which `Authenticate` is not told; adding that is an API decision for the owner. |
+| POP3-STLS-15 | RFC 2595 §2.5 | MUST | The server checks the TLS negotiation result: a failed negotiation closes without authenticating. Which versions, suites and client certificates are acceptable is host policy in the `tls.Config`. | TestSTLSHandshakeFailure |
+| POP3-STLS-16 | RFC 2595 §4 | MUST | A server with STLS also implements the RFC 2449 extension mechanism, so STLS is announced through CAPA in AUTHORIZATION. | TestCapaBothStates, TestSTLSCredentials |
+| POP3-STLS-17 | RFC 2595 §4 | MAY | AUTH EXTERNAL authenticates with TLS client credentials. | n/a: EXTERNAL is not implemented and RFC 2595 does not require it; a client certificate grants nothing on its own (POP3-STLS-08). |
+| POP3-STLS-18 | RFC 2595 §6; RFC 4616 §2 | MUST | PLAIN is not announced or used without a strong encryption layer unless backward compatibility needs it, and each PLAIN field is accepted up to 255 octets. With a TLS config SASL PLAIN appears only after STLS; a server built without TLS is the backward-compatible case. | TestSASLCapability, TestSASLPlainRequiresTLS, TestRFC5034LargestPlainResponse |
+| POP3-STLS-19 | RFC 2595 §§2.2, 2.4, 2.5, 4, 7 | MUST | Client duties: check the server identity against the hostname, never use an insecurely looked-up name, warn or stop on mismatch, send nothing after STLS until TLS is up, and discard cached capabilities. | n/a: client duties. This library is a server only; the server side of pipelined commands after STLS is POP3-STLS-07. |
+
+## RFC 5034: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 5034 was read line by line, §§1–9, for every
+RFC 2119 keyword. Each one was matched to a row above or added below. Already
+covered: the §3 SASL capability (POP3-SASL-01, POP3-CAPA-08), §4 one-step and
+challenge exchanges (POP3-SASL-02/03), the `*` cancel and undecodable response
+(POP3-SASL-04), unknown mechanisms (POP3-SASL-05), credential failures
+(POP3-SASL-06) and refusing PLAIN before STLS (POP3-SASL-07). The pass found
+**two bugs, now fixed**: the response line after the `+ ` challenge was capped
+at 1024 octets, so the largest PLAIN response RFC 4616 requires (1024 base64
+characters plus CRLF) was refused (POP3-SASL-08); and Go's `encoding/base64`
+skips CR and LF, so a response with a bare CR inside it was decoded instead of
+rejected (POP3-SASL-09). Negative control: with `session.go` from before the
+fix, the largest-response case times out and both bare-CR cases authenticate.
+POP3-LENGTH-03 was re-checked against §4's line-length text and is now mapped.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-SASL-08 | RFC 5034 §4; RFC 4616 §2 | MUST | Handle the largest response a supported mechanism generates, whatever the command-line limit: PLAIN with 255-octet authzid, authcid and password (1024 base64 characters) after the `+ ` challenge reaches the Backend intact and logs in; one octet more replies `-ERR Command line too long` and closes with no Backend call. | TestRFC5034LargestPlainResponse |
+| POP3-SASL-09 | RFC 5034 §4 | MUST | Reject, not ignore, any character outside the base64 alphabet and any pad before the end: `=AAA`, `AAA=BBBB`, missing padding, a space, a bare CR (in the challenge response and the initial response) and the URL-safe alphabet all reply `-ERR Invalid base64 response` with no Backend call, and a fresh AUTH succeeds. | TestRFC5034Base64Strictness |
+| POP3-SASL-10 | RFC 5034 §3 | MUST | Keep announcing SASL after a successful AUTH, though no further AUTH is allowed. | TestSASLCapability |
+| POP3-SASL-11 | RFC 5034 §4 | MUST NOT | The empty challenge is exactly `+ ` with no other data. | TestSASLPlainExchange |
+| POP3-SASL-12 | RFC 5034 §4 | MUST | Reject an unsupported mechanism, a cancelled exchange and a failed authentication with `-ERR`, and behave as if AUTH had not been issued: the session stays in AUTHORIZATION and a fresh AUTH logs in. | TestSASLPlainRejections, TestSASLPlainCredentialFailures |
+| POP3-SASL-13 | RFC 5034 §4 | MUST | Reject an initial response sent with a mechanism where the server speaks first. | n/a: the only mechanism, PLAIN, has the client speak first, so an initial response is always valid. |
+| POP3-SASL-14 | RFC 5034 §§4, 7 | SHOULD | Prepare the authorization identity with SASLprep, and fail the authentication if preparation fails or gives an empty string. | n/a: known gap. The engine checks the PLAIN message is UTF-8 (POP3-SASL-05) and passes authzid unchanged to the Backend, which decides whether it may act as that identity; there is no SASLprep in the engine. |
+| POP3-SASL-15 | RFC 5034 §4 | MUST | When a SASL security layer takes effect, discard earlier client knowledge and apply TLS after the SASL encoding. | n/a: PLAIN negotiates no security layer. |
+| POP3-SASL-16 | RFC 5034 §4 | MUST | Implement PLAIN over TLS. | TestSASLPlainRequiresTLS |
+| POP3-SASL-17 | RFC 5034 §4 | MUST | Offer a configuration that neither announces nor permits a plaintext password mechanism before STLS; it SHOULD be the default. Any TLS config gives this behaviour, with no opt-out. | TestSASLCapability, TestSASLPlainRequiresTLS |
+| POP3-SASL-18 | RFC 5034 §4 | SHOULD | Implement further mechanisms that send no plaintext password, such as GSSAPI. | n/a: not implemented; PLAIN is the only mechanism. |
+| POP3-SASL-19 | RFC 5034 §5 | MUST | Accept the AUTH keyword and mechanism name in any case. | TestSASLPlainExchange |
+| POP3-SASL-20 | RFC 5034 §§3, 4 | MUST | Client duties: no initial response without the SASL capability, no initial response that makes AUTH exceed 255 octets, `=` for an empty initial response, `*` for an undecodable challenge, discard capabilities after a security layer, verify the server certificate before PLAIN. | n/a: client duties. This library is a server only. |
+
+## RFC 6856: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 6856 was read line by line, §§1–8, for every
+RFC 2119 keyword. Each one was matched to a row above or added below. Already
+covered: the §2 capability (POP3-UTF8-01), §2.1 command and mode
+(POP3-UTF8-02/03), STLS after UTF8 (POP3-UTF8-04), non-ASCII outside UTF-8
+mode (POP3-UTF8-05), LIST sizes (POP3-UTF8-06), §2.2 SASLprep and RFC 3629
+checks (POP3-UTF8-07/08), §3 LANG (POP3-UTF8-09), §§4–5 the `[UTF8]` code
+(POP3-UTF8-10) and APOP (POP3-APOP-01). UTF-8 in AUTH is governed by RFC 5034
+(POP3-SASL-05). No code bug was found; POP3-UTF8-08 and POP3-UTF8-10 stay
+known gaps.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-UTF8-11 | RFC 6856 §2.1 | MAY | The server may answer the UTF8 command with `-ERR`: without a UTF8Backend it does, in both states, and UTF8 mode stays off. | TestUTF8CommandStates |
+| POP3-UTF8-12 | RFC 6856 §2.1 | SHOULD | In UTF-8 mode, convert a maildrop stored in another charset to UTF-8 before sending it; binary content-transfer-encoding stays forbidden. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve, and the Backend knows the mode (POP3-UTF8-03). |
+| POP3-UTF8-13 | RFC 6856 §§2.1, 2.2 | MUST | Client duties: no STLS after UTF8, and no UTF-8 credentials unless the UTF8 capability has the USER argument. | n/a: client duties. The server side of STLS after UTF8 is POP3-UTF8-04. |

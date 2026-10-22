@@ -107,7 +107,7 @@ func expectSASL(t *testing.T, got []string, offered bool) {
 // RFC 2449 §6.3, RFC 5034 §3: a server supporting AUTH lists SASL with its
 // mechanisms in both states. Only a SASLBackend offers it, and only while
 // AUTH PLAIN is accepted: with a TLS config, not before STLS.
-// checklist: POP3-CAPA-08 POP3-SASL-01 POP3-CAPA-12
+// checklist: POP3-CAPA-08 POP3-SASL-01 POP3-CAPA-12 POP3-SASL-10 POP3-SASL-17 POP3-STLS-18
 func TestSASLCapability(t *testing.T) {
 	t.Run("without-backend", func(t *testing.T) {
 		w := connect(t, backend{password: "secret"})
@@ -136,7 +136,7 @@ func TestSASLCapability(t *testing.T) {
 // without one the server sends an empty "+ " challenge and reads the response
 // line. RFC 4616 §2 carries authzid, authcid and password. Success enters
 // TRANSACTION. Keywords and mechanism names are case-insensitive.
-// checklist: POP3-SASL-02 POP3-SASL-03
+// checklist: POP3-SASL-02 POP3-SASL-03 POP3-SASL-11 POP3-SASL-19
 func TestSASLPlainExchange(t *testing.T) {
 	for _, tc := range []struct {
 		name, authzid string
@@ -172,7 +172,7 @@ func TestSASLPlainExchange(t *testing.T) {
 // base64-decode rejects the command; an unknown mechanism is refused. A
 // malformed RFC 4616 message is refused too. None of these reach the
 // Backend or end AUTHORIZATION, and a fresh AUTH can still succeed.
-// checklist: POP3-SASL-04 POP3-SASL-05
+// checklist: POP3-SASL-04 POP3-SASL-05 POP3-SASL-12
 func TestSASLPlainRejections(t *testing.T) {
 	for _, tc := range []struct {
 		name, command, response, reply string
@@ -208,7 +208,7 @@ func TestSASLPlainRejections(t *testing.T) {
 
 // RFC 3206 §5: a credential failure carries AUTH. Like PASS, it is recorded
 // with the Limiter, and the failure that earns a ban closes the session.
-// checklist: POP3-SASL-06
+// checklist: POP3-SASL-06 POP3-SASL-12
 func TestSASLPlainCredentialFailures(t *testing.T) {
 	limiter := &authRespBanLimiter{limit: 3}
 	b := &saslBackend{backend: backend{password: "secret"}}
@@ -229,7 +229,7 @@ func TestSASLPlainCredentialFailures(t *testing.T) {
 // RFC 5034 §§4, 6 and RFC 2595 §2.2: PLAIN sends the password in the clear,
 // so with a TLS config AUTH is refused before STLS, exactly like USER, and
 // the Backend is never called. After STLS it succeeds.
-// checklist: POP3-SASL-07
+// checklist: POP3-SASL-07 POP3-SASL-16 POP3-SASL-17 POP3-STLS-11 POP3-STLS-13 POP3-STLS-18
 func TestSASLPlainRequiresTLS(t *testing.T) {
 	server, client := stlsConfigs(t)
 	b := &saslBackend{backend: backend{password: "secret"}}
@@ -244,9 +244,9 @@ func TestSASLPlainRequiresTLS(t *testing.T) {
 	expect(t, w.cmd("STAT"), "+OK 1 42")
 }
 
-// Library policy: the response line after the "+ " challenge obeys the same
-// 1024-octet cap as a command line, so an over-long one is refused and closes
-// the session; a client that disconnects at the challenge ends the session.
+// Library policy: the response line after the "+ " challenge is capped at the
+// largest PLAIN response (1026 octets with CRLF, POP3-SASL-08), so an
+// unterminated over-long one is refused and closes the session; a client that disconnects at the challenge ends the session.
 // Neither reaches the Backend.
 // checklist: POP3-SASL-POLICY-01
 func TestSASLPlainResponseLine(t *testing.T) {
@@ -254,9 +254,9 @@ func TestSASLPlainResponseLine(t *testing.T) {
 		b := &saslBackend{backend: backend{password: "secret"}}
 		w := connect(t, b)
 		expect(t, w.cmd("AUTH PLAIN"), "+ ")
-		// net.Pipe is unbuffered: write the full 1024-octet buffer without an
-		// LF from another goroutine, then read the refusal.
-		go func() { _, _ = io.WriteString(w.conn, strings.Repeat("A", 1024)) }()
+		// net.Pipe is unbuffered: write two full 1024-octet buffers without
+		// an LF from another goroutine, then read the refusal.
+		go func() { _, _ = io.WriteString(w.conn, strings.Repeat("A", 2048)) }()
 		expect(t, w.line(), "-ERR Command line too long")
 		if _, err := w.reader.ReadString('\n'); err == nil {
 			t.Fatal("session stayed open after an over-long response")

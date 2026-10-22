@@ -95,7 +95,7 @@ func (w *wire) login(password string) {
 	w.status(w.cmd("PASS "+password), "+OK")
 }
 
-// checklist: POP3-AUTH-01 POP3-AUTH-02 POP3-USER-01 POP3-PASS-01 POP3-PASS-02
+// checklist: POP3-AUTH-01 POP3-AUTH-02 POP3-USER-01 POP3-PASS-01 POP3-PASS-02 POP3-STLS-12
 func TestAuthorizationUserPass(t *testing.T) {
 	w := connect(t, backend{password: "secret"})
 	for _, cmd := range []string{"STAT", "LIST", "UIDL", "RETR 1", "TOP 1 0", "DELE 1", "NOOP", "RSET"} {
@@ -163,7 +163,7 @@ func TestAuthorizationQuit(t *testing.T) {
 	}
 }
 
-// checklist: POP3-CAPA-01 POP3-CAPA-02 POP3-CAPA-03 POP3-CAPA-04
+// checklist: POP3-CAPA-01 POP3-CAPA-02 POP3-CAPA-03 POP3-CAPA-04 POP3-STLS-16
 func TestCapaBothStates(t *testing.T) {
 	w := connect(t, backend{password: "secret"})
 	var before map[string]bool
