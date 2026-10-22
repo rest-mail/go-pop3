@@ -113,16 +113,13 @@ func (s *Session) Handle() {
 		}
 
 		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			continue
-		}
 
 		slog.Debug("pop3: recv", "remote", s.conn.RemoteAddr(), "cmd", redactCommand(line))
 
 		cmd, arg := parseCommand(line)
 		// RFC 1939 §7: PASS must immediately follow a successful USER.
 		// Clear before dispatch so even refused commands and malformed USER
-		// invalidate the previous exchange. Ignored blank lines stay ignored.
+		// invalidate the previous exchange, including an empty command line.
 		if cmd != "PASS" {
 			s.auth.username = ""
 		}
