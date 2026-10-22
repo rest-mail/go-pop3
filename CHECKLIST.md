@@ -7,7 +7,8 @@ behavior across AUTHORIZATION/TRANSACTION, plus selected RFC 2449 RESP-CODES
 and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-length support
 and separately labeled command-reader policy, plus the optional RFC 1939 §3
 autologout timer as this library implements it, plus RFC 8314 §§3.1, 3.4 implicit
-TLS and selected connection closure. It is not an inventory of all applicable RFC
+TLS and selected connection closure, plus the RFC 5034 AUTH command with
+RFC 4616 SASL PLAIN for a `SASLBackend`. It is not an inventory of all applicable RFC
 requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -16,7 +17,9 @@ Requirements below paraphrase the primary texts:
 [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt),
 [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.txt),
 [RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt),
-[RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt), and
+[RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt),
+[RFC 4616](https://www.rfc-editor.org/rfc/rfc4616.txt),
+[RFC 5034](https://www.rfc-editor.org/rfc/rfc5034.txt), and
 [RFC 8314](https://www.rfc-editor.org/rfc/rfc8314.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
@@ -70,7 +73,7 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-CAPA-05 | RFC 2449 §6.5 | Normative | When the Backend opts in, announce LOGIN-DELAY with the minimum seconds between logins in both states, followed by USER only in AUTHORIZATION when the value varies per user, and the user's own value in TRANSACTION. | TestCapaLoginDelay, TestCapaLoginDelayRequiresBackend |
 | POP3-CAPA-06 | RFC 2449 §6.1 | Normative | Announce parameterless TOP unchanged in both states; the advertised command is usable only in TRANSACTION. | TestCapaTopContract |
 | POP3-CAPA-07 | RFC 2449 §6.8 | Normative | Announce parameterless UIDL unchanged in both states; the advertised single and multiline commands are usable only in TRANSACTION. | TestCapaUIDLContract |
-| POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | n/a: AUTH/SASL is not implemented or advertised; Backend only supports USER/PASS authentication. Adding mechanisms needs a new authentication API, not a fabricated mechanism list. |
+| POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | TestSASLCapability |
 | POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. |
 | POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | n/a: the optional IMPLEMENTATION capability is not advertised; there is no configured implementation-identification value. No client behavior based on implementation identity is provided. |
 | POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8 and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
@@ -477,7 +480,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **108 rows: 101 mapped / 7 n/a, with 75 named wire tests**.
+The exact current PARTIAL inventory is **116 rows: 110 mapped / 6 n/a, with 81 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -596,3 +599,25 @@ adoption of the shared reusable workflow. Keep library/root coverage separate
 from checker/tool coverage. Existing parser fuzzing, octet-count and log-redaction
 work is prior work, not newly claimed here. This partial proof does not close
 #374 or the all-principals acceptance work in #376.
+
+## RFC 5034 and RFC 4616: AUTH with SASL PLAIN
+
+AUTH is opt-in: only a Backend that implements `SASLBackend` gets it, and the
+only mechanism is PLAIN. For any other Backend, AUTH stays an unknown command
+(POP3-COMMAND-01) and CAPA has no SASL line. These Session/net.Pipe tests use
+memory backends; the TLS rows use the STLS fixture's temporary certificate.
+The reply text after the status indicator is the library's current output, not
+an RFC mandate. The library offers no other mechanism, so RFC 5034 §4's rules for
+server challenges with data, security layers and the success data of
+`+OK` do not apply to PLAIN and have no rows here.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-SASL-01 | RFC 5034 §3; RFC 2449 §6.3 | Normative | List `SASL PLAIN` in CAPA in both states only while AUTH PLAIN is accepted: never for a Backend without SASL, and with a TLS config only after STLS. | TestSASLCapability |
+| POP3-SASL-02 | RFC 5034 §4 | Normative | `AUTH PLAIN <initial-response>` authenticates in one step; `AUTH PLAIN` with no initial response gets an empty `+ ` challenge and reads the response on the next line. Keyword and mechanism name are case-insensitive. | TestSASLPlainExchange |
+| POP3-SASL-03 | RFC 5034 §4; RFC 4616 §2 | Normative | Decode `[authzid] NUL authcid NUL passwd`, pass all three to the Backend, and enter TRANSACTION on `+OK`; AUTH is refused once authenticated. | TestSASLPlainExchange |
+| POP3-SASL-04 | RFC 5034 §4 | MUST | A `*` response cancels the exchange with `-ERR`; a response that does not base64-decode rejects the command. Neither reaches the Backend, and the session stays in AUTHORIZATION. | TestSASLPlainRejections |
+| POP3-SASL-05 | RFC 5034 §4; RFC 4616 §2 | Normative | Refuse an unknown or missing mechanism, an empty initial response (`=`), and a PLAIN message without exactly three fields, with an empty authcid or password, or that is not UTF-8, without calling the Backend; a fresh AUTH can then succeed. | TestSASLPlainRejections |
+| POP3-SASL-06 | RFC 3206 §5; RFC 5034 §4 | Normative | A credential failure, including an authzid the Backend refuses, replies `-ERR [AUTH]`, is recorded with the Limiter like a failed PASS, and the failure that earns a ban replies `-ERR [AUTH] Too many authentication failures` and closes the session. | TestSASLPlainCredentialFailures |
+| POP3-SASL-07 | RFC 5034 §6; RFC 4616 §5; RFC 2595 §2.2 | Normative | With a TLS config, refuse AUTH before STLS like USER (`-ERR TLS required`, no Backend call, with or without initial response) so PLAIN never carries a password in the clear; after STLS it succeeds. | TestSASLPlainRequiresTLS |
+| POP3-SASL-POLICY-01 | Library policy (session.go AUTH response line) | Normative | The response line after the `+ ` challenge obeys the 1024-octet command-line cap: an over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |

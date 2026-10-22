@@ -20,6 +20,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `SASLBackend`, an optional Backend extension that enables the RFC 5034 `AUTH`
+  command with SASL `PLAIN` (RFC 4616), by initial response or after an empty
+  `+ ` challenge. CAPA lists `SASL PLAIN` only while it is accepted; with a TLS
+  config, AUTH is refused before STLS like USER. Credential failures reply
+  `-ERR [AUTH]` and count toward the Limiter ban like PASS. Backends without it
+  are unchanged. Seven RFC 5034 checklist rows (POP3-SASL-01..07), one
+  response-line policy row and
+  POP3-CAPA-08 are now mapped to wire tests (110/116 mapped).
 - Nine RFC 1939 core command/state checklist rows: six mapped requirements
   covering keyword case permutations, credential bytes, empty commands, fresh
   deletion state and RETR failure recovery, plus three explicit backend lock

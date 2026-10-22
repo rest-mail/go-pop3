@@ -41,8 +41,10 @@
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
 // UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus LOGIN-DELAY
 // when the Backend is a [LoginDelayBackend] and UTF8 (RFC 6856) when it is
-// a [UTF8Backend]. Every PASS failure caused by the credentials carries
-// the [AUTH] response code; a maildrop that cannot be loaded after good credentials
+// a [UTF8Backend]. A [SASLBackend] also gets the RFC 5034 AUTH command with
+// SASL PLAIN and the SASL PLAIN capability, under the same TLS rule as USER.
+// Every PASS or AUTH failure caused by the credentials carries the [AUTH]
+// response code; a maildrop that cannot be loaded after good credentials
 // carries [SYS/TEMP] (or [SYS/PERM] for a backend that returns no Mailbox), per
 // RFC 3206 §4.
 //
@@ -169,6 +171,23 @@ type UTF8Backend interface {
 	// returned Mailbox must downgrade them (RFC 6857), and [Message.Size] must
 	// count the downgraded bytes that Retrieve returns.
 	AuthenticateUTF8(user, pass string, utf8 bool) (Mailbox, error)
+}
+
+// SASLBackend is an optional [Backend] extension that enables the RFC 5034 AUTH
+// command with the SASL PLAIN mechanism (RFC 4616). CAPA lists SASL PLAIN only
+// while AUTH PLAIN is accepted: like USER/PASS, it is refused on a plaintext
+// connection when a TLS config is present, until STLS succeeds. A Backend
+// without it never sees AUTH, which stays an unknown command.
+type SASLBackend interface {
+	Backend
+	// AuthenticatePlain validates SASL PLAIN credentials: authcid and pass log
+	// in, and authzid is the identity the client asks to act as, empty when it
+	// names none. A Backend that does not support acting as another user rejects
+	// a non-empty authzid that differs from authcid. Errors mean what they mean
+	// for [Backend.Authenticate], so a credential failure gets [AUTH] and counts
+	// against the [Limiter]. utf8 is as for [UTF8Backend.AuthenticateUTF8], and
+	// always false unless the Backend is also a UTF8Backend.
+	AuthenticatePlain(authzid, authcid, pass string, utf8 bool) (Mailbox, error)
 }
 
 // Mailbox is a single authenticated POP3 maildrop. Every method is scoped to the
