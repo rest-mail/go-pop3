@@ -111,7 +111,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "141 items (121 mapped to tests, 20 not applicable), 87 tests") {
+				if code != 0 || !strings.Contains(out.String(), "152 items (123 mapped to tests, 29 not applicable), 87 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return
