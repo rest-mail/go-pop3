@@ -135,59 +135,126 @@ func (b extensionUTF8DelayBackend) AuthenticateUTF8(user, pass string, _ bool) (
 	return b.Authenticate(user, pass)
 }
 
+// capaImplementation adds IMPLEMENTATION to the configuration wrappers below.
+// Each wrapper embeds the interface it extends, so the session still sees the
+// LOGIN-DELAY and UTF8 methods of the backend underneath.
+type capaImplementation struct{ transactionOnly bool }
+
+func (c capaImplementation) Implementation() (string, bool) {
+	return "go-pop3 test v1", c.transactionOnly
+}
+
+type extensionUTF8DelayAPI interface {
+	pop3.UTF8Backend
+	LoginDelay() (int, bool)
+}
+
+type (
+	extensionImplBackend struct {
+		pop3.Backend
+		capaImplementation
+	}
+	extensionImplDelayBackend struct {
+		pop3.LoginDelayBackend
+		capaImplementation
+	}
+	extensionImplUTF8Backend struct {
+		pop3.UTF8Backend
+		capaImplementation
+	}
+	extensionImplUTF8DelayBackend struct {
+		extensionUTF8DelayAPI
+		capaImplementation
+	}
+)
+
+var (
+	_ pop3.ImplementationBackend = extensionImplBackend{}
+	_ pop3.LoginDelayBackend     = extensionImplDelayBackend{}
+	_ pop3.UTF8Backend           = extensionImplUTF8Backend{}
+	_ pop3.LoginDelayBackend     = extensionImplUTF8DelayBackend{}
+	_ pop3.UTF8Backend           = extensionImplUTF8DelayBackend{}
+)
+
+// withImplementation wraps b so it also announces IMPLEMENTATION, keeping
+// whichever of LOGIN-DELAY and UTF8 b already offers.
+func withImplementation(b pop3.Backend, transactionOnly bool) pop3.Backend {
+	impl := capaImplementation{transactionOnly}
+	switch b := b.(type) {
+	case extensionUTF8DelayAPI:
+		return extensionImplUTF8DelayBackend{b, impl}
+	case pop3.UTF8Backend:
+		return extensionImplUTF8Backend{b, impl}
+	case pop3.LoginDelayBackend:
+		return extensionImplDelayBackend{b, impl}
+	}
+	return extensionImplBackend{b, impl}
+}
+
 // checklist: POP3-CAPA-11 POP3-CAPA-12
 func TestCapaConfiguredGrammar(t *testing.T) {
 	for _, secured := range []bool{false, true} {
 		for _, delay := range []bool{false, true} {
 			for _, utf8 := range []bool{false, true} {
-				name := fmt.Sprintf("tls=%t/delay=%t/utf8=%t", secured, delay, utf8)
-				t.Run(name, func(t *testing.T) {
-					var b pop3.Backend = backend{password: "secret"}
-					if delay {
-						b = &loginDelayCapaBackend{seconds: 60, perUser: true}
-					}
-					if utf8 {
+				for _, impl := range []string{"none", "both", "transaction"} {
+					name := fmt.Sprintf("tls=%t/delay=%t/utf8=%t/implementation=%s", secured, delay, utf8, impl)
+					t.Run(name, func(t *testing.T) {
+						var b pop3.Backend = backend{password: "secret"}
 						if delay {
-							b = extensionUTF8DelayBackend{b.(*loginDelayCapaBackend)}
-						} else {
-							b = extensionUTF8Backend{b}
+							b = &loginDelayCapaBackend{seconds: 60, perUser: true}
 						}
-					}
-					var config, client *tls.Config
-					if secured {
-						config, client = stlsConfigs(t)
-					}
-					w := extensionConnect(t, b, config)
-					want := map[string][]string{"USER": {}, "TOP": {}, "UIDL": {}, "RESP-CODES": {}, "AUTH-RESP-CODE": {}, "PIPELINING": {}}
-					if utf8 {
-						want["UTF8"] = []string{}
-					}
-					if delay {
-						want["LOGIN-DELAY"] = []string{"60", "USER"}
-					}
-					if secured {
-						want["STLS"] = []string{}
-					}
-					check := func() {
-						t.Helper()
-						if got := extensionCapabilities(t, w); !reflect.DeepEqual(got, want) {
-							t.Fatalf("CAPA=%v, want %v", got, want)
+						if utf8 {
+							if delay {
+								b = extensionUTF8DelayBackend{b.(*loginDelayCapaBackend)}
+							} else {
+								b = extensionUTF8Backend{b}
+							}
 						}
-					}
-					check()
-					if secured {
-						stlsUpgrade(t, w, client)
-						delete(want, "STLS")
+						if impl != "none" {
+							b = withImplementation(b, impl == "transaction")
+						}
+						var config, client *tls.Config
+						if secured {
+							config, client = stlsConfigs(t)
+						}
+						w := extensionConnect(t, b, config)
+						want := map[string][]string{"USER": {}, "TOP": {}, "UIDL": {}, "RESP-CODES": {}, "AUTH-RESP-CODE": {}, "PIPELINING": {}}
+						if utf8 {
+							want["UTF8"] = []string{}
+						}
+						if delay {
+							want["LOGIN-DELAY"] = []string{"60", "USER"}
+						}
+						if impl == "both" {
+							want["IMPLEMENTATION"] = []string{"go-pop3", "test", "v1"}
+						}
+						if secured {
+							want["STLS"] = []string{}
+						}
+						check := func() {
+							t.Helper()
+							if got := extensionCapabilities(t, w); !reflect.DeepEqual(got, want) {
+								t.Fatalf("CAPA=%v, want %v", got, want)
+							}
+						}
 						check()
-					}
-					w.login("secret")
-					if delay {
-						want["LOGIN-DELAY"] = []string{"60"}
-					}
-					check()
-					w.status(w.cmd("NOOP"), "+OK")
-					// Raw-pipe cleanup avoids simultaneous TLS close_notify writes.
-				})
+						if secured {
+							stlsUpgrade(t, w, client)
+							delete(want, "STLS")
+							check()
+						}
+						w.login("secret")
+						if delay {
+							want["LOGIN-DELAY"] = []string{"60"}
+						}
+						if impl != "none" {
+							want["IMPLEMENTATION"] = []string{"go-pop3", "test", "v1"}
+						}
+						check()
+						w.status(w.cmd("NOOP"), "+OK")
+						// Raw-pipe cleanup avoids simultaneous TLS close_notify writes.
+					})
+				}
 			}
 		}
 	}
