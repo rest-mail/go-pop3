@@ -40,6 +40,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	inUse := read("internal/rfctest/in_use_test.go")
 	loginDelay := read("internal/rfctest/login_delay_test.go")
 	loginDelayCapa := read("internal/rfctest/login_delay_capa_test.go")
+	implementationCapa := read("internal/rfctest/implementation_capa_test.go")
 	extensions := read("internal/rfctest/extensions_test.go")
 	backendSystem := read("internal/rfctest/backend_system_test.go")
 	sasl := read("internal/rfctest/sasl_test.go")
@@ -81,36 +82,37 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			file := filepath.Join(dir, "CHECKLIST.md")
 			for path, content := range map[string]string{
 				file: tc.checklist,
-				filepath.Join(dir, "core_states_test.go"):      coreStates,
-				filepath.Join(dir, "extensions_test.go"):       extensions,
-				filepath.Join(dir, "backend_system_test.go"):   backendSystem,
-				filepath.Join(dir, "sasl_test.go"):             sasl,
-				filepath.Join(dir, "utf8_test.go"):             utf8,
-				filepath.Join(dir, "rfc1939_audit_test.go"):    rfc1939Audit,
-				filepath.Join(dir, "rfc5034_audit_test.go"):    rfc5034Audit,
-				filepath.Join(dir, "rfc3206_audit_test.go"):    rfc3206Audit,
-				filepath.Join(dir, "rfc4616_audit_test.go"):    rfc4616Audit,
-				filepath.Join(dir, "rfc8314_audit_test.go"):    rfc8314Audit,
-				filepath.Join(dir, "in_use_test.go"):           inUse,
-				filepath.Join(dir, "login_delay_test.go"):      loginDelay,
-				filepath.Join(dir, "login_delay_capa_test.go"): loginDelayCapa,
-				filepath.Join(dir, "tls_closure_test.go"):      tlsClosure,
-				filepath.Join(dir, "authorization_test.go"):    tc.tests,
-				filepath.Join(dir, "transaction_test.go"):      transaction,
-				filepath.Join(dir, "update_test.go"):           update,
-				filepath.Join(dir, "optional_test.go"):         optional,
-				filepath.Join(dir, "stls_test.go"):             stls,
-				filepath.Join(dir, "pipelining_test.go"):       pipelining,
-				filepath.Join(dir, "response_codes_test.go"):   responseCodes,
-				filepath.Join(dir, "command_length_test.go"):   commandLength,
-				filepath.Join(dir, "command_errors_test.go"):   commandErrors,
-				filepath.Join(dir, "auth_pipelining_test.go"):  tc.authPipelining,
-				filepath.Join(dir, "session_vector_test.go"):   tc.sessionVector,
-				filepath.Join(dir, "uidl_sessions_test.go"):    uidSessions,
-				filepath.Join(dir, "pass_immediate_test.go"):   passImmediate,
-				filepath.Join(dir, "idle_test.go"):             idle,
-				filepath.Join(dir, "stls_idle_test.go"):        stlsIdle,
-				filepath.Join(dir, "implicit_tls_test.go"):     tc.implicitTLS,
+				filepath.Join(dir, "core_states_test.go"):         coreStates,
+				filepath.Join(dir, "extensions_test.go"):          extensions,
+				filepath.Join(dir, "backend_system_test.go"):      backendSystem,
+				filepath.Join(dir, "sasl_test.go"):                sasl,
+				filepath.Join(dir, "utf8_test.go"):                utf8,
+				filepath.Join(dir, "rfc1939_audit_test.go"):       rfc1939Audit,
+				filepath.Join(dir, "rfc5034_audit_test.go"):       rfc5034Audit,
+				filepath.Join(dir, "rfc3206_audit_test.go"):       rfc3206Audit,
+				filepath.Join(dir, "rfc4616_audit_test.go"):       rfc4616Audit,
+				filepath.Join(dir, "rfc8314_audit_test.go"):       rfc8314Audit,
+				filepath.Join(dir, "in_use_test.go"):              inUse,
+				filepath.Join(dir, "login_delay_test.go"):         loginDelay,
+				filepath.Join(dir, "login_delay_capa_test.go"):    loginDelayCapa,
+				filepath.Join(dir, "implementation_capa_test.go"): implementationCapa,
+				filepath.Join(dir, "tls_closure_test.go"):         tlsClosure,
+				filepath.Join(dir, "authorization_test.go"):       tc.tests,
+				filepath.Join(dir, "transaction_test.go"):         transaction,
+				filepath.Join(dir, "update_test.go"):              update,
+				filepath.Join(dir, "optional_test.go"):            optional,
+				filepath.Join(dir, "stls_test.go"):                stls,
+				filepath.Join(dir, "pipelining_test.go"):          pipelining,
+				filepath.Join(dir, "response_codes_test.go"):      responseCodes,
+				filepath.Join(dir, "command_length_test.go"):      commandLength,
+				filepath.Join(dir, "command_errors_test.go"):      commandErrors,
+				filepath.Join(dir, "auth_pipelining_test.go"):     tc.authPipelining,
+				filepath.Join(dir, "session_vector_test.go"):      tc.sessionVector,
+				filepath.Join(dir, "uidl_sessions_test.go"):       uidSessions,
+				filepath.Join(dir, "pass_immediate_test.go"):      passImmediate,
+				filepath.Join(dir, "idle_test.go"):                idle,
+				filepath.Join(dir, "stls_idle_test.go"):           stlsIdle,
+				filepath.Join(dir, "implicit_tls_test.go"):        tc.implicitTLS,
 			} {
 				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 					t.Fatal(err)
@@ -119,7 +121,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "204 items (154 mapped to tests, 50 not applicable), 97 tests") {
+				if code != 0 || !strings.Contains(out.String(), "204 items (155 mapped to tests, 49 not applicable), 99 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return

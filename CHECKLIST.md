@@ -74,14 +74,17 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-CAPA-07 | RFC 2449 §6.8 | Normative | Announce parameterless UIDL unchanged in both states; the advertised single and multiline commands are usable only in TRANSACTION. | TestCapaUIDLContract |
 | POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | TestSASLCapability |
 | POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. |
-| POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | n/a: the optional IMPLEMENTATION capability is not advertised; there is no configured implementation-identification value. No client behavior based on implementation identity is provided. |
+| POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | TestCapaImplementation, TestCapaImplementationRequiresBackend |
 | POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8 and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
 
 The configuration matrix combines the optional LOGIN-DELAY and UTF8 backend
 interfaces, with and without TLS. It checks the full actual CAPA list before TLS,
 after a verified handshake, and after authentication, including parameter changes.
 TOP/UIDL capability proofs also execute their advertised commands and check their
-state restrictions. The n/a entries distinguish unsupported optional features,
+state restrictions. An `ImplementationBackend` announces IMPLEMENTATION in
+both states or after login only, and text outside the §9 param grammar or the
+512-octet line limit omits the tag (POP3-CAPA-10). The n/a entries distinguish
+unsupported optional features,
 unavailable host retention policy, and duties belonging to clients; they are not
 proofs of those features or host/client conformance.
 
@@ -477,7 +480,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current inventory is **204 rows: 154 mapped / 50 n/a, with 97 named wire tests**.
+The exact current inventory is **204 rows: 155 mapped / 49 n/a, with 99 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
