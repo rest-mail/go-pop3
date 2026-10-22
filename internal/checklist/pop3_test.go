@@ -45,6 +45,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	sasl := read("internal/rfctest/sasl_test.go")
 	coreStates := read("internal/rfctest/core_states_test.go")
 	utf8 := read("internal/rfctest/utf8_test.go")
+	rfc1939Audit := read("internal/rfctest/rfc1939_audit_test.go")
 	for _, tc := range []struct{ name, checklist, tests, authPipelining, sessionVector, implicitTLS, want string }{
 		{"valid", checklist, tests, authPipelining, sessionVector, implicitTLS, ""},
 		{"missing-command-error-test", strings.Replace(checklist, "TestCommandErrorsAuthorization", "TestMissingCommandError", 1), tests, authPipelining, sessionVector, implicitTLS, "POP3-COMMAND-01 lists TestMissingCommandError, which is not a test"},
@@ -81,6 +82,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "backend_system_test.go"):   backendSystem,
 				filepath.Join(dir, "sasl_test.go"):             sasl,
 				filepath.Join(dir, "utf8_test.go"):             utf8,
+				filepath.Join(dir, "rfc1939_audit_test.go"):    rfc1939Audit,
 				filepath.Join(dir, "in_use_test.go"):           inUse,
 				filepath.Join(dir, "login_delay_test.go"):      loginDelay,
 				filepath.Join(dir, "login_delay_capa_test.go"): loginDelayCapa,
@@ -109,7 +111,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "127 items (114 mapped to tests, 13 not applicable), 84 tests") {
+				if code != 0 || !strings.Contains(out.String(), "141 items (121 mapped to tests, 20 not applicable), 87 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return

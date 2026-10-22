@@ -13,7 +13,7 @@ import (
 
 // Exercise every ASCII case permutation, including uppercase, through the
 // public dispatcher. Bodies and following replies prove multiline framing.
-// checklist: POP3-CORE-01
+// checklist: POP3-CORE-01 POP3-CORE-03
 func TestCoreCommandCasePermutations(t *testing.T) {
 	for mask := 0; mask < 16; mask++ {
 		t.Run(fmt.Sprint(mask), func(t *testing.T) {
