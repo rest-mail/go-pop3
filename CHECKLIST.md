@@ -8,7 +8,8 @@ and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-len
 and separately labeled command-reader policy, plus the optional RFC 1939 §3
 autologout timer as this library implements it, plus RFC 8314 §§3.1, 3.4 implicit
 TLS and selected connection closure, plus the RFC 5034 AUTH command with
-RFC 4616 SASL PLAIN for a `SASLBackend`. It is not an inventory of all applicable RFC
+RFC 4616 SASL PLAIN for a `SASLBackend`, plus RFC 6856 UTF8 for a
+`UTF8Backend`. It is not an inventory of all applicable RFC
 requirements, a full conformance claim, or a coverage badge. A mapped row means
 its named wire test asserts the stated behavior; it does not prove the entire
 referenced section.
@@ -19,7 +20,8 @@ Requirements below paraphrase the primary texts:
 [RFC 2595](https://www.rfc-editor.org/rfc/rfc2595.txt),
 [RFC 3206](https://www.rfc-editor.org/rfc/rfc3206.txt),
 [RFC 4616](https://www.rfc-editor.org/rfc/rfc4616.txt),
-[RFC 5034](https://www.rfc-editor.org/rfc/rfc5034.txt), and
+[RFC 5034](https://www.rfc-editor.org/rfc/rfc5034.txt),
+[RFC 6856](https://www.rfc-editor.org/rfc/rfc6856.txt), and
 [RFC 8314](https://www.rfc-editor.org/rfc/rfc8314.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
@@ -480,7 +482,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **116 rows: 110 mapped / 6 n/a, with 81 named wire tests**.
+The exact current PARTIAL inventory is **127 rows: 114 mapped / 13 n/a, with 84 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -621,3 +623,34 @@ server challenges with data, security layers and the success data of
 | POP3-SASL-06 | RFC 3206 §5; RFC 5034 §4 | Normative | A credential failure, including an authzid the Backend refuses, replies `-ERR [AUTH]`, is recorded with the Limiter like a failed PASS, and the failure that earns a ban replies `-ERR [AUTH] Too many authentication failures` and closes the session. | TestSASLPlainCredentialFailures |
 | POP3-SASL-07 | RFC 5034 §6; RFC 4616 §5; RFC 2595 §2.2 | Normative | With a TLS config, refuse AUTH before STLS like USER (`-ERR TLS required`, no Backend call, with or without initial response) so PLAIN never carries a password in the clear; after STLS it succeeds. | TestSASLPlainRequiresTLS |
 | POP3-SASL-POLICY-01 | Library policy (session.go AUTH response line) | Normative | The response line after the `+ ` challenge obeys the 1024-octet command-line cap: an over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |
+
+## RFC 6856: UTF8 and the remaining optional authentication commands
+
+UTF8 is opt-in: only a Backend that implements `UTF8Backend` announces it and
+accepts the command. The engine records the mode and reports it to
+`AuthenticateUTF8`; it never rewrites message content, so the content duties
+below fall to the host. These Session/net.Pipe tests use a memory backend that
+records each reported mode; the TLS row uses the STLS fixture's temporary
+certificate. The n/a rows marked "known gap" are unmet duties, not met ones.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-UTF8-01 | RFC 6856 §2; RFC 2449 §5 | Normative | Announce the `UTF8` tag in both states only for a UTF8Backend, without the USER argument (the engine does not apply SASLprep to USER/PASS); a Backend without the extension never announces it. | TestUTF8CapabilityBothStates |
+| POP3-UTF8-02 | RFC 6856 §§2, 2.1 | Normative | The UTF8 command takes no parameters and is valid only in AUTHORIZATION: `UTF8 <arg>` and UTF8 after login get `-ERR` and leave the mode unchanged; without UTF8Backend it is an unknown command in both states. | TestUTF8CommandStates |
+| POP3-UTF8-03 | RFC 6856 §2.1 | Normative | A successful UTF8 enables UTF-8 mode for the session, and every following login reports it to the backend (utf8=true), including after a failed PASS; a session that never issued UTF8, or whose UTF8 was refused, reports utf8=false. | TestUTF8CommandStates |
+| POP3-UTF8-04 | RFC 6856 §2.1; RFC 2595 §4 | MAY | Clients must not issue STLS after UTF8 and servers MAY refuse it. This library accepts STLS but discards UTF-8 mode with it: the login after TLS reports utf8=false unless the client issues UTF8 again over TLS. | TestUTF8ModeResetByTLS |
+| POP3-UTF8-05 | RFC 6856 §§2.1, 4 | MUST | Outside UTF-8 mode, never send non-ASCII strings as is: send a surrogate message or fail the RETR/TOP with `-ERR`. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve; the engine reports the mode to AuthenticateUTF8 (POP3-UTF8-03) so the backend can choose the form. |
+| POP3-UTF8-06 | RFC 6856 §2.1 | SHOULD | The LIST size of a message matches the octets RETR sends, not counting byte-stuffing. | n/a: host duty. LIST reports the Message.Size the Mailbox supplies for the form it will serve. |
+| POP3-UTF8-07 | RFC 6856 §2.2 | SHOULD | A server announcing `UTF8 USER` applies SASLprep to USER/PASS arguments and rejects prohibited characters. | n/a: the USER argument is not announced (POP3-UTF8-01), so this conditional duty does not apply. |
+| POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). | n/a: known gap. USER/PASS arguments reach the Backend unchecked. Rejecting them in the engine would also refuse 8-bit legacy credentials, which is an owner decision. AUTH PLAIN already rejects non-UTF-8 (POP3-SASL-05). |
+| POP3-UTF8-09 | RFC 6856 §3 | Normative | The optional LANG capability and command select the language of human-readable response text. | n/a: LANG is not implemented or announced; the command is unknown (POP3-COMMAND-01). |
+| POP3-UTF8-10 | RFC 6856 §5 | Normative | A LIST/TOP/RETR refused because the message needs UTF-8 mode carries the `[UTF8]` response code. | n/a: known gap. Mailbox errors have no way to ask for `[UTF8]`; such refusals reply with plain `-ERR`. |
+| POP3-APOP-01 | RFC 1939 §7 (APOP); RFC 6856 §2.2 | Normative | The optional APOP command authenticates with an MD5 digest of the greeting timestamp and a shared secret; with UTF-8 credentials the digest uses SASLprep. | n/a: APOP is not implemented and the greeting carries no timestamp; APOP gets `-ERR` in both states (POP3-COMMAND-02). |
+
+Negative control: with the `s.utf8 = false` reset after STLS removed from
+`session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
+utf8=true.
+
+This section is still not a complete inventory. The other sections cover the
+requirements chosen so far, and no line-by-line pass over every RFC has been
+made, so the checklist stays PARTIAL.
