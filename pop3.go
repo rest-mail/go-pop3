@@ -35,7 +35,9 @@
 // # TLS and authentication
 //
 // A non-nil *tls.Config enables both the STLS command (STARTTLS for POP3,
-// RFC 2595) on the plaintext port and implicit TLS on the secure port. When a
+// RFC 2595) on the plaintext port and implicit TLS on the secure port; the
+// secure port needs one, and the config needs a certificate source, or
+// [Server.ListenAndServe] fails (RFC 8314 §§3.1, 4). When a
 // TLS config is present the engine refuses USER on a plaintext connection, so
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,

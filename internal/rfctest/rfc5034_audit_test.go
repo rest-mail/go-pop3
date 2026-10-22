@@ -35,7 +35,7 @@ func (b *maxPlainBackend) AuthenticatePlain(authzid, authcid, pass string, _ boo
 // 255-octet authzid, authcid and password, PLAIN encodes to 1024 base64
 // characters, a 1026-octet line with CRLF, which is accepted and reaches the
 // Backend intact. One octet more is refused and closes, with no Backend call.
-// checklist: POP3-SASL-08 POP3-LENGTH-03 POP3-STLS-18
+// checklist: POP3-SASL-08 POP3-LENGTH-03 POP3-STLS-18 POP3-PLAIN-01
 func TestRFC5034LargestPlainResponse(t *testing.T) {
 	id := strings.Repeat("a", 255)
 	pass := strings.Repeat("p", 255)

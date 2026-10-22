@@ -39,7 +39,7 @@ func (b *systemFailureBackend) Messages() ([]pop3.Message, error) {
 
 // RFC 3206 §4 distinguishes transient and intervention-required system errors
 // from credential failures, including when credentials cannot be checked.
-// checklist: POP3-RESP-CODES-07
+// checklist: POP3-RESP-CODES-07 POP3-RESP-CODES-10
 func TestResponseCodeBackendSystemFailures(t *testing.T) {
 	for _, tc := range []struct {
 		code string

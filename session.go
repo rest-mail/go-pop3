@@ -331,7 +331,7 @@ func (s *Session) handleSTLS() bool {
 	// TLS is not trusted afterwards: it must issue UTF8 again.
 	s.utf8 = false
 
-	slog.Info("pop3: TLS established", "remote", s.conn.RemoteAddr())
+	slog.Info("pop3: TLS established", append([]any{"remote", s.conn.RemoteAddr()}, s.tlsLogAttrs()...)...)
 	return false
 }
 
@@ -488,12 +488,12 @@ func (s *Session) login(username string, mailbox Mailbox, err error) {
 		return
 	}
 	if err != nil {
-		slog.Warn("pop3: auth failed",
+		slog.Warn("pop3: auth failed", append([]any{
 			"remote", s.conn.RemoteAddr(),
 			"user", username,
 			"event", "pop3_auth_failed",
 			"ip", ip,
-		)
+		}, s.tlsLogAttrs()...)...)
 		s.limiter.RecordAuthFail(ip)
 		if s.limiter.IsBanned(ip) {
 			s.err("[AUTH] Too many authentication failures")
@@ -542,8 +542,19 @@ func (s *Session) login(username string, mailbox Mailbox, err error) {
 	s.mailbox = mailbox
 	s.messages = messages
 
-	slog.Info("pop3: authenticated", "remote", s.conn.RemoteAddr(), "user", username, "messages", len(s.messages))
+	slog.Info("pop3: authenticated", append([]any{"remote", s.conn.RemoteAddr(), "user", username, "messages", len(s.messages)}, s.tlsLogAttrs()...)...)
 	s.ok("Authentication successful")
+}
+
+// tlsLogAttrs names the TLS version and cipher suite for the STLS and login
+// logs (RFC 8314 §4), or nothing on a plaintext connection.
+func (s *Session) tlsLogAttrs() []any {
+	c, ok := s.conn.(*tls.Conn)
+	if !ok {
+		return nil
+	}
+	state := c.ConnectionState()
+	return []any{"tls_version", tls.VersionName(state.Version), "tls_cipher", tls.CipherSuiteName(state.CipherSuite)}
 }
 
 // systemError keeps backend details out of the wire response. Unclassified

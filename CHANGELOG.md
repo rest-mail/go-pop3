@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The RFC checklist is no longer labelled partial: RFC 3206, RFC 4616 and
+  RFC 8314 now have line-by-line audit records too, so every implemented RFC
+  has one. The README badge reads "RFC checklist: 153/204 mapped".
+
 - Empty POP3 command lines now receive `-ERR` and invalidate a pending USER,
   as RFC 1939 §3 requires for syntactically invalid commands; previously they
   were silently ignored.
@@ -128,6 +132,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   optional for ordinary local Go test runs; see README for scope and usage.
 
 ### Fixed
+
+- **A `POP3TLS` port with no TLS config listened in plaintext.** RFC 8314 §3.1
+  says the "pop3s" port begins a TLS handshake immediately, but with a nil
+  `tls.Config` `ListenAndServe` opened it as a plain TCP listener. It now
+  returns an error before opening any listener. A host that relied on this,
+  such as a gateway started without certificate files, now fails to start
+  instead of serving port 995 in the clear. Checked by POP3-ITLS-05.
+
+- **A TLS config with no certificate announced STLS that always failed.** RFC
+  8314 §4 says not to advertise STARTTLS when it is likely to fail, for example
+  with no server certificate. `ListenAndServe` now refuses a `tls.Config` with
+  no `Certificates`, `GetCertificate` or `GetConfigForClient`. Checked by
+  POP3-ITLS-06.
+
+- **TLS logs did not name the cipher.** RFC 8314 §4 says servers SHOULD log
+  TLS cipher information with connection and authentication logs. The STLS,
+  login and failed-login logs now carry `tls_version` and `tls_cipher`.
+  Checked by POP3-ITLS-11.
 
 - **AUTH PLAIN rejected the largest valid response.** RFC 5034 §4 requires a
   server to handle the largest response its mechanisms generate. PLAIN with
