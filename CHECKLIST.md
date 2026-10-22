@@ -75,7 +75,7 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | TestSASLCapability |
 | POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. |
 | POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | TestCapaImplementation, TestCapaImplementationRequiresBackend |
-| POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8 and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
+| POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8, IMPLEMENTATION (both states or TRANSACTION only) and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
 
 The configuration matrix combines the optional LOGIN-DELAY and UTF8 backend
 interfaces, with and without TLS. It checks the full actual CAPA list before TLS,

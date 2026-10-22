@@ -27,7 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `ImplementationBackend` announces the RFC 2449 §6.9 `IMPLEMENTATION`
   capability in CAPA, in both states or only after login. Text outside the
   §9 param grammar or the 512-octet line limit omits the tag. Checked by
-  POP3-CAPA-10.
+  POP3-CAPA-10, and POP3-CAPA-11 now combines it with LOGIN-DELAY, UTF8 and
+  STLS in the CAPA grammar matrix.
 
 - `ErrUTF8Required` lets a Mailbox refuse a message that has no form outside
   UTF-8 mode. RETR and TOP then reply `-ERR [UTF8] Message requires UTF-8 mode`
