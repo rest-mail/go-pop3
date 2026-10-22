@@ -245,6 +245,9 @@ func (s *Session) handleCapa() {
 	if tag, ok := s.loginDelayTag(); ok {
 		s.sendLine("%s", tag)
 	}
+	if tag, ok := s.implementationTag(); ok {
+		s.sendLine("%s", tag)
+	}
 	if _, ok := s.backend.(UTF8Backend); ok {
 		s.sendLine("UTF8")
 	}
@@ -273,6 +276,36 @@ func (s *Session) loginDelayTag() (string, bool) {
 	tag := "LOGIN-DELAY " + strconv.Itoa(seconds)
 	if perUser {
 		tag += " USER"
+	}
+	return tag, true
+}
+
+// implementationTag builds the IMPLEMENTATION capability line (RFC 2449 §6.9)
+// for the current state. It is omitted before login when the Backend asks for
+// TRANSACTION state only, and whenever the text is not a valid §9 param list or
+// the line would exceed the 512-octet response limit (§4).
+func (s *Session) implementationTag() (string, bool) {
+	b, ok := s.backend.(ImplementationBackend)
+	if !ok {
+		return "", false
+	}
+	text, transactionOnly := b.Implementation()
+	if transactionOnly && s.mailbox == nil {
+		return "", false
+	}
+	tag := "IMPLEMENTATION " + text
+	if len(tag)+len("\r\n") > 512 {
+		return "", false
+	}
+	for _, param := range strings.Split(text, " ") {
+		if param == "" {
+			return "", false
+		}
+		for i := 0; i < len(param); i++ {
+			if param[i] < 0x21 || param[i] > 0x7e {
+				return "", false
+			}
+		}
 	}
 	return tag, true
 }

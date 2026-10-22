@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![RFC checklist: 154/204 mapped](https://img.shields.io/badge/RFC%20checklist-154%2F204%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 155/204 mapped](https://img.shields.io/badge/RFC%20checklist-155%2F204%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -45,7 +45,8 @@ so what the client downloads is exactly what you stored.
   `USER`, `SASL PLAIN` for a `SASLBackend` while `AUTH` is accepted, `STLS`,
   `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
   ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`,
-  `LOGIN-DELAY` for a `LoginDelayBackend`, and
+  `LOGIN-DELAY` for a `LoginDelayBackend`, `IMPLEMENTATION` for an
+  `ImplementationBackend` (in both states, or after login only), and
   `UTF8` ([RFC 6856](https://www.rfc-editor.org/rfc/rfc6856)) when the backend
   implements `UTF8Backend`: the `UTF8` command is accepted before login and
   `AuthenticateUTF8` learns whether the client may receive raw UTF-8 headers.
@@ -155,6 +156,12 @@ times and chooses the delay. To tell clients the delay in advance, implement
 `pop3.LoginDelayBackend`: CAPA then announces `LOGIN-DELAY <seconds>` before
 login, followed by `USER` when the delay varies per user. A Mailbox that also
 implements `pop3.LoginDelayMailbox` announces the user's own value after login.
+
+To identify the server software, implement `pop3.ImplementationBackend`: CAPA
+then announces `IMPLEMENTATION <text>` (RFC 2449 §6.9), in both states or, when
+`Implementation` reports `transactionOnly`, only after login so unauthenticated
+clients learn less. Text that is not printable-ASCII words separated by single
+spaces, or that would make the line longer than 512 octets, omits the tag.
 
 For login infrastructure failures, `Authenticate` and `Messages` may return
 `pop3.ErrSystemTemporary` or `pop3.ErrSystemPermanent` (directly or wrapped).

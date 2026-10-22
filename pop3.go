@@ -42,8 +42,8 @@
 // credentials are never sent in the clear; with no TLS config USER is accepted
 // as-is. CAPA advertises the supported extensions (RFC 2449): USER, STLS, TOP,
 // UIDL, RESP-CODES, AUTH-RESP-CODE (RFC 3206) and PIPELINING, plus LOGIN-DELAY
-// when the Backend is a [LoginDelayBackend] and UTF8 (RFC 6856) when it is
-// a [UTF8Backend]. A [SASLBackend] also gets the RFC 5034 AUTH command with
+// when the Backend is a [LoginDelayBackend], IMPLEMENTATION when it is an
+// [ImplementationBackend] and UTF8 (RFC 6856) when it is a [UTF8Backend]. A [SASLBackend] also gets the RFC 5034 AUTH command with
 // SASL PLAIN and the SASL PLAIN capability, under the same TLS rule as USER.
 // Every PASS or AUTH failure caused by the credentials carries the [AUTH]
 // response code; a maildrop that cannot be loaded after good credentials
@@ -159,6 +159,21 @@ type LoginDelayBackend interface {
 type LoginDelayMailbox interface {
 	Mailbox
 	LoginDelay() int
+}
+
+// ImplementationBackend is an optional [Backend] extension that announces the
+// RFC 2449 §6.9 IMPLEMENTATION capability, identifying the server software. A
+// Backend without it never has the tag in CAPA. Clients must not change their
+// behavior on it, so the text is informational only.
+type ImplementationBackend interface {
+	Backend
+	// Implementation returns the text CAPA announces after IMPLEMENTATION, such
+	// as "Example-POP3-Server-v1.2". transactionOnly hides the tag before login,
+	// which RFC 2449 §6.9 permits so unauthenticated clients learn less. Text
+	// that is empty, is not printable ASCII words separated by single spaces
+	// (the RFC 2449 §9 param grammar) or would make the line longer than 512
+	// octets omits the tag.
+	Implementation() (text string, transactionOnly bool)
 }
 
 // UTF8Backend is an optional [Backend] extension for RFC 6856 internationalized

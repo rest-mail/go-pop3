@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The RFC checklist is no longer labelled partial: RFC 3206, RFC 4616 and
   RFC 8314 now have line-by-line audit records too, so every implemented RFC
-  has one. The README badge reads "RFC checklist: 154/204 mapped".
+  has one. The README badge reads "RFC checklist: 155/204 mapped".
 
 - Empty POP3 command lines now receive `-ERR` and invalidate a pending USER,
   as RFC 1939 §3 requires for syntactically invalid commands; previously they
@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   POP3-RESP-CODES-04.
 
 ### Added
+
+- `ImplementationBackend` announces the RFC 2449 §6.9 `IMPLEMENTATION`
+  capability in CAPA, in both states or only after login. Text outside the
+  §9 param grammar or the 512-octet line limit omits the tag. Checked by
+  POP3-CAPA-10.
 
 - `ErrUTF8Required` lets a Mailbox refuse a message that has no form outside
   UTF-8 mode. RETR and TOP then reply `-ERR [UTF8] Message requires UTF-8 mode`
