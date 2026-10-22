@@ -1,18 +1,15 @@
-# POP3 RFC checklist — PARTIAL checked foundation
+# POP3 RFC checklist
 
-This is an explicitly **PARTIAL** checklist for selected AUTHORIZATION,
-USER/PASS, CAPA, RFC 1939 §§5–6 TRANSACTION/UPDATE, selected §7 TOP/UIDL
-behavior, RFC 2595 §4 STLS transitions and selected RFC 2449 §6.6 PIPELINING
-behavior across AUTHORIZATION/TRANSACTION, plus selected RFC 2449 RESP-CODES
-and RFC 3206 AUTH response-code behavior, plus selected RFC 2449 §4 command-length support
-and separately labeled command-reader policy, plus the optional RFC 1939 §3
-autologout timer as this library implements it, plus RFC 8314 §§3.1, 3.4 implicit
-TLS and selected connection closure, plus the RFC 5034 AUTH command with
-RFC 4616 SASL PLAIN for a `SASLBackend`, plus RFC 6856 UTF8 for a
-`UTF8Backend`. It is not an inventory of all applicable RFC
-requirements, a full conformance claim, or a coverage badge. A mapped row means
-its named wire test asserts the stated behavior; it does not prove the entire
-referenced section.
+This checklist covers every RFC this library implements: RFC 1939 (POP3),
+RFC 2449 (CAPA, RESP-CODES, PIPELINING and the other extensions), RFC 2595
+(STLS), RFC 3206 (SYS and AUTH response codes), RFC 4616 (SASL PLAIN),
+RFC 5034 (AUTH), RFC 6856 (UTF8) and RFC 8314 (implicit TLS). Each RFC was read
+line by line on 2026-10-22, and every MUST, SHOULD, MAY and their negations has
+a row: either mapped to a wire test that asserts it, or `n/a` with the reason
+(a client, host, operator or specification duty, a feature not implemented, or
+a named known gap). The audit records near the end say what each pass found. A
+mapped row means its named test asserts the stated behavior; it does not prove
+the whole referenced section, and this is not a certification.
 
 Requirements below paraphrase the primary texts:
 [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.txt),
@@ -202,11 +199,9 @@ These proofs start a Server through the public `ListenAndServe` with only the
 `POP3TLS` listener, the way the gateway serves port 995. The test reserves a
 free loopback port, so this is the one fixture that opens a socket; the client
 is a real TLS 1.3 client that verifies the temporary self-signed certificate.
-Client-certificate authentication (RFC 8314 §§4.2, 5.5) is not supported, so
-the "even if a client certificate was supplied" clause is shown only for
-connections without one. Forced shutdown, error-path closure and a `POP3TLS`
-port configured with a nil TLS config (which today listens in plaintext) remain
-unproven. Selected normal closure proofs follow below.
+Client-certificate authentication (RFC 8314 §§4.2, 5.5) is not supported; the
+"even if a client certificate was supplied" clause is POP3-ITLS-07. Forced shutdown and error-path closure remain
+unproven; a `POP3TLS` port with a nil TLS config is refused (POP3-ITLS-05). Selected normal closure proofs follow below.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -479,10 +474,10 @@ validates IDs and bidirectional named test mappings; it does not interpret RFC
 text or test assertions. `internal/rfctest` is a deliberately scoped package of
 real wire tests using the public Session API, an in-memory backend and net.Pipe.
 Every test in that package must map to this checklist. Existing root tests and
-fuzz targets remain outside this partial mapping; they are still run by CI.
+fuzz targets remain outside this mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **152 rows: 123 mapped / 29 n/a, with 87 named wire tests**.
+The exact current inventory is **204 rows: 153 mapped / 51 n/a, with 96 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -651,9 +646,8 @@ Negative control: with the `s.utf8 = false` reset after STLS removed from
 `session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
 utf8=true.
 
-This section is still not a complete inventory. RFC 1939, 2449, 2595, 5034 and
-6856 have had a line-by-line pass (see the audit records below); RFC 3206, 4616
-and 8314 have not, so the checklist stays PARTIAL.
+Every RFC this library implements (1939, 2449, 2595, 3206, 4616, 5034, 6856
+and 8314) has had a line-by-line pass; the dated audit records follow.
 
 ## RFC 1939: line-by-line audit additions
 
@@ -796,3 +790,79 @@ known gaps.
 | POP3-UTF8-11 | RFC 6856 §2.1 | MAY | The server may answer the UTF8 command with `-ERR`: without a UTF8Backend it does, in both states, and UTF8 mode stays off. | TestUTF8CommandStates |
 | POP3-UTF8-12 | RFC 6856 §2.1 | SHOULD | In UTF-8 mode, convert a maildrop stored in another charset to UTF-8 before sending it; binary content-transfer-encoding stays forbidden. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve, and the Backend knows the mode (POP3-UTF8-03). |
 | POP3-UTF8-13 | RFC 6856 §§2.1, 2.2 | MUST | Client duties: no STLS after UTF8, and no UTF-8 credentials unless the UTF8 capability has the USER argument. | n/a: client duties. The server side of STLS after UTF8 is POP3-UTF8-04. |
+
+## RFC 3206: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 3206 was read line by line, §§1–9, for
+every RFC 2119 keyword (it uses SHOULD and RECOMMENDED only) and for the
+normative definitions of SYS and AUTH. Each one was matched to a row above or
+added below. Already covered: §4 SYS/TEMP and SYS/PERM, only with `-ERR`
+(POP3-RESP-CODES-04/07, POP3-RESP-POLICY-03); §5 AUTH on credential failures
+of PASS and AUTH (POP3-RESP-CODES-02, POP3-SASL-06); the §5 SHOULDs to support
+CAPA and announce AUTH-RESP-CODE, and the §6 capability with no arguments in
+both states (POP3-RESP-CODES-03). §3 restates the RFC 2449 IN-USE and
+LOGIN-DELAY codes (POP3-RESP-CODES-05/06). §7 is IANA registration done by the
+RFC itself. No code bug was found.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-RESP-CODES-09 | RFC 3206 §§5, 8 | RECOMMENDED | Never send the AUTH code to USER, which would reveal that the user exists: USER replies `+OK` to known and unknown names, and its refusals (no argument, TLS required, already authenticated) carry no code. | TestRFC3206NoAuthCodeOnUser |
+| POP3-RESP-CODES-10 | RFC 3206 §§5, 6 | Normative | AUTH-RESP-CODE promises that only AUTH-coded errors are credential problems: AUTH is on every credential-caused PASS and AUTH failure, and never on system, USER or TLS-required refusals. | TestResponseCodeAuthRespCodeCapability, TestSASLPlainCredentialFailures, TestResponseCodeBackendSystemFailures, TestRFC3206NoAuthCodeOnUser |
+| POP3-RESP-CODES-11 | RFC 3206 §§3–5 | Normative | Client duties: compare response codes case-insensitively, and ask for new credentials only on AUTH when AUTH-RESP-CODE is announced. | n/a: client duties. This library is a server only. |
+
+## RFC 4616: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 4616 was read line by line, §§1–6, for every
+RFC 2119 keyword (MUST, MUST NOT, SHALL, SHOULD, SHOULD NOT, RECOMMENDED,
+MAY). Each one was matched to a row above or added below. Already covered: the
+§2 message format and an empty authcid or password (POP3-SASL-03/05), 255-octet
+ASCII fields (POP3-SASL-08, POP3-STLS-18), refusing PLAIN before STLS
+(POP3-SASL-07). §3 pseudo-code and §4 IMAP examples are not normative. The
+rows below are what the pass found missing. New wire tests prove the 255-octet
+limit counts octets of multi-byte UTF-8, and that each field outside the ABNF
+is refused. No code bug was found: `utf8.Valid` already rejects overlong forms,
+surrogates and code points above U+10FFFF.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-PLAIN-01 | RFC 4616 §2 | MUST | Accept authzid, authcid and passwd up to and including 255 octets, counted in octets: fields of 2-, 3- and 4-octet UTF-8 characters filled to 255 octets reach the Backend intact. | TestRFC4616MultibyteFieldLimits, TestRFC5034LargestPlainResponse |
+| POP3-PLAIN-02 | RFC 4616 §2 | SHALL | Fields are UTF-8 (1*SAFE): an overlong form, surrogate, code point above U+10FFFF, stray continuation, truncated sequence or Latin-1 octet in any field replies `-ERR Invalid PLAIN response` with no Backend call, and a fresh AUTH succeeds. | TestRFC4616RejectsMalformedUTF8 |
+| POP3-PLAIN-03 | RFC 4616 §2 | MUST NOT | NUL never appears inside a field: a password with an extra NUL is a fourth field and is refused with no Backend call. | TestRFC4616RejectsMalformedUTF8 |
+| POP3-PLAIN-04 | RFC 4616 §2 | RECOMMENDED | Prepare the presented authcid and password, preferably with SASLprep, before verification. | n/a: host duty. The engine passes the fields unchanged to `AuthenticatePlain`, which verifies them; §2 lets the server choose another preparation or none. |
+| POP3-PLAIN-05 | RFC 4616 §2 | MUST | When a hash of the expected string is stored, prepare the string before hashing it. | n/a: host duty. The Backend owns the credential store. |
+| POP3-PLAIN-06 | RFC 4616 §2 | SHALL | Verification fails when preparation fails or gives an empty string: the engine refuses an empty authcid or password with no Backend call; failures of the Backend's own preparation are its credential failures (POP3-SASL-06). | TestSASLPlainRejections |
+| POP3-PLAIN-07 | RFC 4616 §2 | Normative | With no authzid, derive the authorization identity from the prepared authcid. | n/a: host duty. An absent authzid reaches `AuthenticatePlain` as the empty string (POP3-SASL-03), and the Backend derives the identity. |
+| POP3-PLAIN-08 | RFC 4616 §2 | MAY | Use the credentials to initialize another authentication database. | n/a: host duty. |
+| POP3-PLAIN-09 | RFC 4616 §§1, 5 | SHOULD | By default, advertise and use PLAIN only with adequate data security: with a TLS config, SASL PLAIN is neither announced nor accepted before STLS. A server built without TLS is RFC 2595's backward-compatible case (POP3-STLS-12, POP3-STLS-18). | TestSASLCapability, TestSASLPlainRequiresTLS |
+| POP3-PLAIN-10 | RFC 4616 §1 | MUST | A protocol specification that allows PLAIN mandates a strong data security service. | n/a: duty on specifications. RFC 5034 §4 does, and the server side is POP3-SASL-16. |
+
+## RFC 8314: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 8314 was read line by line, §§1–8 and
+Appendix A, for every RFC 2119 keyword. Each one was matched to a row above or
+added below. Already covered: §3.1 handshake first, greeting and AUTHORIZATION
+(POP3-ITLS-01 to 03) and §3.4 close alerts (POP3-ITLS-04). §§3.2–3.3 (IMAP,
+submission) and §7 port registrations do not apply to a POP3 library. The pass
+found **two bugs, now fixed** in `Server.ListenAndServe`: a `POP3TLS` port with
+a nil TLS config was opened in plaintext, against §3.1's immediate handshake
+(POP3-ITLS-05); and a TLS config with no certificate source announced STLS that
+could only fail, against §4 (POP3-ITLS-06). Both now return an error before any
+listener opens. Negative control: with `server.go` from before the fix, both
+new tests fail. The pass also added the TLS version and cipher suite to the
+STLS and login logs (POP3-ITLS-11). MSP, operator and MUA duties are listed as n/a rows.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-ITLS-05 | RFC 8314 §3.1 | Normative | The "pop3s" port begins a TLS handshake immediately, so it never listens in plaintext: a `POP3TLS` port with a nil TLS config makes ListenAndServe fail, and neither that port nor a requested plaintext port is opened. | TestRFC8314ImplicitTLSRequiresConfig |
+| POP3-ITLS-06 | RFC 8314 §4 | SHOULD NOT | Do not advertise STLS when it is likely to fail, such as with no server certificate: a TLS config with no Certificates, GetCertificate or GetConfigForClient makes ListenAndServe fail on either port; each source alone is accepted. | TestRFC8314TLSConfigNeedsCertificate |
+| POP3-ITLS-07 | RFC 8314 §§3.1, 4.2 | MUST | Enter AUTHORIZATION after the greeting even if a client certificate was supplied on implicit TLS: transaction commands are refused, no SASL (so no EXTERNAL) is offered, AUTH EXTERNAL is unknown, and USER/PASS logs in. | TestRFC8314ClientCertificateImplicitTLS |
+| POP3-ITLS-08 | RFC 8314 §4 | MUST | Support TLS access for POP: implicit TLS and, for existing clients, STLS (both SHOULD instances). | TestImplicitTLSSession, TestSTLSCredentials |
+| POP3-ITLS-09 | RFC 8314 §4 | MUST | Support TLS 1.2 or later: implicit-TLS sessions complete with TLS 1.2 and TLS 1.3. | TestImplicitTLSCloseNotify |
+| POP3-ITLS-10 | RFC 8314 §§4, 4.1 | SHOULD | Use RFC 7525 cipher suites, retire SSL and TLS 1.0, and require TLS 1.1 or later for new users (RECOMMENDED). | n/a: host policy in the `tls.Config`, used unchanged. Go's crypto/tls has no SSL, and its server default minimum is TLS 1.2. |
+| POP3-ITLS-11 | RFC 8314 §4 | SHOULD | Log TLS cipher information with connection and authentication logs: the STLS log and the successful and failed login logs carry `tls_version` and `tls_cipher` on STLS and implicit TLS, and a plaintext login log carries neither. The implicit-TLS "new connection" log comes before the handshake, so it has none. | TestRFC8314LogsTLSCipher |
+| POP3-ITLS-12 | RFC 8314 §4.1 | MUST NOT | Once clear-text authentication is refused, never show over clear text whether credentials were valid, with the same denial for valid and invalid users: USER replies `-ERR TLS required` for any name and AUTH PLAIN is refused with no Backend call, so no password is checked. | TestRFC3206NoAuthCodeOnUser, TestSASLPlainRequiresTLS |
+| POP3-ITLS-13 | RFC 8314 §4.1 | SHOULD | Users who sent passwords in clear text change them when moving to TLS. | n/a: operator duty. |
+| POP3-ITLS-14 | RFC 8314 §4.2 | MUST NOT | Request a client certificate only when some certificates are accepted as sufficient for authentication. | n/a: host duty. `ClientAuth` comes from the host's `tls.Config`; the engine never changes it. |
+| POP3-ITLS-15 | RFC 8314 §4.2 | MUST | A server that accepts a client certificate as sufficient enables SASL EXTERNAL. | n/a: a certificate is never sufficient (POP3-ITLS-07, POP3-STLS-08), so this conditional duty does not apply. |
+| POP3-ITLS-16 | RFC 8314 §§4, 4.3–4.6 | MUST | MSP duties: advertise SRV records preferring implicit TLS, deprecate clear-text servers, maintain valid certificates, sign DNS with DNSSEC, publish TLSA only when signed, record the cipher in submission Received fields. | n/a: operator duties, outside a POP3 library. |
+| POP3-ITLS-17 | RFC 8314 §§3.1, 3.4, 5 | MUST | MUA duties: validate certificates per RFC 7817, enforce a minimum confidentiality level, implement TLS 1.2, use SRV records safely, offer client certificates only on implicit TLS, implement EXTERNAL; the client MAY close TCP after its close alert. | n/a: client duties. This library is a server only. |

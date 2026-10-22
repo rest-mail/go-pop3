@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Partial checklist: 139/178 mapped](https://img.shields.io/badge/partial%20checklist-139%2F178%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 153/204 mapped](https://img.shields.io/badge/RFC%20checklist-153%2F204%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -237,14 +237,15 @@ pipelining, arbitrary malformed inputs and production backend durability are
 outside this reference test. Python is a test-only prerequisite: ordinary Go
 tests skip this comparison unless `POP3_REFERENCE_PYTHON` is set; CI explicitly
 sets it and fails if Python or the comparison fails. No runtime dependency is
-added. The partial checked RFC inventory and remaining gaps are described in
+added. The checked RFC inventory and remaining gaps are described in
 [CHECKLIST.md](CHECKLIST.md).
 
 The coverage badge shows the minimum CI enforces (statements left uncovered are
 listed in [COVERAGE.md](COVERAGE.md)); measured statement coverage is printed in
 each CI run's **Require at least 95% statement coverage** log. The checklist
-badge counts requirements mapped to tests over all rows of the **partial**
-checklist: it is not a count of every applicable RFC requirement. Tests check
+badge counts requirements mapped to tests over all rows of the checklist,
+which has a row for every requirement of each implemented RFC; the rest are
+`n/a` with a reason. Tests check
 both badges against the CI gate and the checklist's actual test mappings. The CI
 badge reports whether verification passed.
 

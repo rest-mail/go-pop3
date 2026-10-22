@@ -3,6 +3,7 @@ package pop3
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -57,7 +58,18 @@ type Ports struct {
 // ListenAndServe starts POP3 listeners on the specified ports. A zero port is
 // skipped. It returns once the listeners are open; connections are served in
 // the background until [Server.Shutdown] or [Server.Close].
+//
+// It refuses to open anything when TLS is configured unusably: a POP3TLS port
+// with a nil tlsConfig, because the "pop3s" service begins a TLS handshake
+// immediately (RFC 8314 §3.1), and a tlsConfig with no certificate source,
+// because STLS would be advertised but always fail (RFC 8314 §4).
 func (s *Server) ListenAndServe(ports Ports) error {
+	if ports.POP3TLS > 0 && s.tlsConfig == nil {
+		return fmt.Errorf("port %d: implicit TLS needs a TLS config", ports.POP3TLS)
+	}
+	if c := s.tlsConfig; c != nil && len(c.Certificates) == 0 && c.GetCertificate == nil && c.GetConfigForClient == nil {
+		return errors.New("TLS config has no certificate")
+	}
 	if ports.POP3 > 0 {
 		if err := s.listen(ports.POP3, false); err != nil {
 			return fmt.Errorf("failed to listen on port %d: %w", ports.POP3, err)
@@ -76,7 +88,7 @@ func (s *Server) listen(port int, implicitTLS bool) error {
 	var listener net.Listener
 	var err error
 
-	if implicitTLS && s.tlsConfig != nil {
+	if implicitTLS {
 		listener, err = tls.Listen("tcp", addr, s.tlsConfig)
 		if err != nil {
 			return err

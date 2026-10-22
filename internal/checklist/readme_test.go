@@ -11,8 +11,7 @@ import (
 )
 
 // Check the real mappings before counting them: a row naming a missing test
-// must never contribute to a green README badge. The checklist is a partial
-// inventory, so the badge says so.
+// must never contribute to a green README badge.
 func TestReadmeChecklistBadge(t *testing.T) {
 	root := filepath.Join("..", "..")
 	file := filepath.Join(root, "CHECKLIST.md")
@@ -32,7 +31,7 @@ func TestReadmeChecklistBadge(t *testing.T) {
 			mapped++
 		}
 	}
-	want := fmt.Sprintf("[![Partial checklist: %d/%d mapped](https://img.shields.io/badge/partial%%20checklist-%d%%2F%d%%20mapped-blue)](CHECKLIST.md)",
+	want := fmt.Sprintf("[![RFC checklist: %d/%d mapped](https://img.shields.io/badge/RFC%%20checklist-%d%%2F%d%%20mapped-blue)](CHECKLIST.md)",
 		mapped, len(items), mapped, len(items))
 	if !strings.Contains(readFile(t, root, "README.md"), want) {
 		t.Fatalf("stale or missing README checklist badge; want:\n%s", want)

@@ -66,7 +66,7 @@ func implicitTLSDial(t *testing.T, addr string, config *tls.Config) *wire {
 	return w
 }
 
-// checklist: POP3-ITLS-01 POP3-ITLS-02 POP3-ITLS-03
+// checklist: POP3-ITLS-01 POP3-ITLS-02 POP3-ITLS-03 POP3-ITLS-08
 func TestImplicitTLSSession(t *testing.T) {
 	server, client := stlsConfigs(t)
 	addr, b := implicitTLSServer(t, server)

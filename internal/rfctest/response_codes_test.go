@@ -155,7 +155,7 @@ func (l *authRespBanLimiter) IsBanned(string) bool  { return l.fails >= l.limit 
 // failure with AUTH SHOULD list AUTH-RESP-CODE in CAPA. The cases cover each
 // credential failure this library reports: a wrong password, an unknown
 // account, and the failure that earns a limiter ban and closes the session.
-// checklist: POP3-RESP-CODES-03
+// checklist: POP3-RESP-CODES-03 POP3-RESP-CODES-10
 func TestResponseCodeAuthRespCodeCapability(t *testing.T) {
 	w := connect(t, backend{password: "secret"})
 	for _, authenticated := range []bool{false, true} {

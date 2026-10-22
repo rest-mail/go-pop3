@@ -107,7 +107,7 @@ func expectSASL(t *testing.T, got []string, offered bool) {
 // RFC 2449 §6.3, RFC 5034 §3: a server supporting AUTH lists SASL with its
 // mechanisms in both states. Only a SASLBackend offers it, and only while
 // AUTH PLAIN is accepted: with a TLS config, not before STLS.
-// checklist: POP3-CAPA-08 POP3-SASL-01 POP3-CAPA-12 POP3-SASL-10 POP3-SASL-17 POP3-STLS-18
+// checklist: POP3-CAPA-08 POP3-SASL-01 POP3-CAPA-12 POP3-SASL-10 POP3-SASL-17 POP3-STLS-18 POP3-PLAIN-09
 func TestSASLCapability(t *testing.T) {
 	t.Run("without-backend", func(t *testing.T) {
 		w := connect(t, backend{password: "secret"})
@@ -172,7 +172,7 @@ func TestSASLPlainExchange(t *testing.T) {
 // base64-decode rejects the command; an unknown mechanism is refused. A
 // malformed RFC 4616 message is refused too. None of these reach the
 // Backend or end AUTHORIZATION, and a fresh AUTH can still succeed.
-// checklist: POP3-SASL-04 POP3-SASL-05 POP3-SASL-12
+// checklist: POP3-SASL-04 POP3-SASL-05 POP3-SASL-12 POP3-PLAIN-06
 func TestSASLPlainRejections(t *testing.T) {
 	for _, tc := range []struct {
 		name, command, response, reply string
@@ -208,7 +208,7 @@ func TestSASLPlainRejections(t *testing.T) {
 
 // RFC 3206 §5: a credential failure carries AUTH. Like PASS, it is recorded
 // with the Limiter, and the failure that earns a ban closes the session.
-// checklist: POP3-SASL-06 POP3-SASL-12
+// checklist: POP3-SASL-06 POP3-SASL-12 POP3-RESP-CODES-10
 func TestSASLPlainCredentialFailures(t *testing.T) {
 	limiter := &authRespBanLimiter{limit: 3}
 	b := &saslBackend{backend: backend{password: "secret"}}
@@ -229,7 +229,7 @@ func TestSASLPlainCredentialFailures(t *testing.T) {
 // RFC 5034 §§4, 6 and RFC 2595 §2.2: PLAIN sends the password in the clear,
 // so with a TLS config AUTH is refused before STLS, exactly like USER, and
 // the Backend is never called. After STLS it succeeds.
-// checklist: POP3-SASL-07 POP3-SASL-16 POP3-SASL-17 POP3-STLS-11 POP3-STLS-13 POP3-STLS-18
+// checklist: POP3-SASL-07 POP3-SASL-16 POP3-SASL-17 POP3-STLS-11 POP3-STLS-13 POP3-STLS-18 POP3-PLAIN-09 POP3-ITLS-12
 func TestSASLPlainRequiresTLS(t *testing.T) {
 	server, client := stlsConfigs(t)
 	b := &saslBackend{backend: backend{password: "secret"}}

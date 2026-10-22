@@ -153,7 +153,7 @@ func TestSTLSNoConfig(t *testing.T) {
 	}
 }
 
-// checklist: POP3-STLS-01 POP3-STLS-03 POP3-STLS-04 POP3-STLS-05 POP3-TLS-POLICY-01 POP3-STLS-11 POP3-STLS-13 POP3-STLS-16
+// checklist: POP3-STLS-01 POP3-STLS-03 POP3-STLS-04 POP3-STLS-05 POP3-TLS-POLICY-01 POP3-STLS-11 POP3-STLS-13 POP3-STLS-16 POP3-ITLS-08
 func TestSTLSCredentials(t *testing.T) {
 	server, client := stlsConfigs(t)
 	w, b := stlsConnect(t, server)

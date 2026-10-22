@@ -25,7 +25,7 @@ func (c closureConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// checklist: POP3-ITLS-04
+// checklist: POP3-ITLS-04 POP3-ITLS-09
 func TestImplicitTLSCloseNotify(t *testing.T) {
 	for _, version := range []struct {
 		name string
