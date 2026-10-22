@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The RFC checklist is no longer labelled partial: RFC 3206, RFC 4616 and
   RFC 8314 now have line-by-line audit records too, so every implemented RFC
-  has one. The README badge reads "RFC checklist: 153/204 mapped".
+  has one. The README badge reads "RFC checklist: 154/204 mapped".
 
 - Empty POP3 command lines now receive `-ERR` and invalidate a pending USER,
   as RFC 1939 §3 requires for syntactically invalid commands; previously they
@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   POP3-RESP-CODES-04.
 
 ### Added
+
+- `ErrUTF8Required` lets a Mailbox refuse a message that has no form outside
+  UTF-8 mode. RETR and TOP then reply `-ERR [UTF8] Message requires UTF-8 mode`
+  (RFC 6856 §5) and mark nothing seen, when the Backend is a UTF8Backend and
+  the client has not issued UTF8. Checked by POP3-UTF8-10.
 
 - `SASLBackend`, an optional Backend extension that enables the RFC 5034 `AUTH`
   command with SASL `PLAIN` (RFC 4616), by initial response or after an empty

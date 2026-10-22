@@ -1,7 +1,10 @@
 package rfctest
 
 import (
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	pop3 "github.com/rest-mail/go-pop3"
@@ -139,5 +142,85 @@ func TestUTF8ModeResetByTLS(t *testing.T) {
 		w.login("secret")
 		quit(t, w, "+OK")
 		b.reported(t, again)
+	}
+}
+
+// utf8RefusalMailbox serves message 2 and refuses message 1 with err, as a
+// Mailbox with no downgraded form of an internationalized message would.
+type utf8RefusalMailbox struct {
+	err  error
+	seen atomic.Int32
+}
+
+func (m *utf8RefusalMailbox) Authenticate(user, pass string) (pop3.Mailbox, error) {
+	if user != "alice" || pass != "secret" {
+		return nil, errors.New("invalid credentials")
+	}
+	return m, nil
+}
+func (m *utf8RefusalMailbox) Messages() ([]pop3.Message, error) {
+	return []pop3.Message{{UID: "eai", Size: 40}, {UID: "ascii", Size: 21}}, nil
+}
+func (m *utf8RefusalMailbox) Retrieve(uid string) ([]byte, error) {
+	if uid == "eai" {
+		return nil, m.err
+	}
+	return []byte("Subject: hi\r\n\r\nbody\r\n"), nil
+}
+func (m *utf8RefusalMailbox) MarkSeen(string) error { m.seen.Add(1); return nil }
+func (m *utf8RefusalMailbox) Delete(string) error   { return nil }
+
+type utf8RefusalBackend struct{ *utf8RefusalMailbox }
+
+func (b utf8RefusalBackend) AuthenticateUTF8(user, pass string, _ bool) (pop3.Mailbox, error) {
+	return b.Authenticate(user, pass)
+}
+
+// RFC 6856 §5: a TOP or RETR refused because the message needs UTF-8 mode
+// carries [UTF8], telling the client to issue UTF8 and try again. LIST is never
+// refused: it reports the Message.Size the Mailbox supplies (POP3-UTF8-06).
+// The code is sent only when the client could act on it: the Backend
+// announces UTF8 and the session is not already in UTF-8 mode. The refused
+// message is not marked seen, and the session goes on serving other messages.
+// checklist: POP3-UTF8-10
+func TestUTF8ResponseCode(t *testing.T) {
+	const coded, plain = "-ERR [UTF8] Message requires UTF-8 mode", "-ERR Failed to retrieve message"
+	for _, tc := range []struct {
+		name      string
+		err       error
+		extension bool
+		utf8      bool
+		want      string
+	}{
+		{"direct", pop3.ErrUTF8Required, true, false, coded},
+		{"wrapped", fmt.Errorf("downgrade: %w", pop3.ErrUTF8Required), true, false, coded},
+		{"other-error", errors.New("disk failure"), true, false, plain},
+		{"without-extension", pop3.ErrUTF8Required, false, false, plain},
+		{"already-utf8", pop3.ErrUTF8Required, true, true, plain},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &utf8RefusalMailbox{err: tc.err}
+			var b pop3.Backend = m
+			if tc.extension {
+				b = utf8RefusalBackend{m}
+			}
+			w := connect(t, b)
+			if tc.utf8 {
+				w.status(w.cmd("UTF8"), "+OK")
+			}
+			w.login("secret")
+			expect(t, w.cmd("RETR 1"), tc.want)
+			expect(t, w.cmd("TOP 1 0"), tc.want)
+			expect(t, w.cmd("LIST 1"), "+OK 1 40")
+			expect(t, w.cmd("RETR 2"), "+OK 21 octets")
+			for _, want := range []string{"Subject: hi", "", "body", "."} {
+				expect(t, w.line(), want)
+			}
+			expect(t, w.cmd("STAT"), "+OK 2 61")
+			quit(t, w, "+OK")
+			if got := m.seen.Load(); got != 1 {
+				t.Fatalf("MarkSeen calls = %d, want 1 (message 2 only)", got)
+			}
+		})
 	}
 }

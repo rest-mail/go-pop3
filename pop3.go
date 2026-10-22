@@ -171,7 +171,8 @@ type UTF8Backend interface {
 	// reports whether the client issued UTF8 before logging in. When it is
 	// false, RFC 6856 §3 forbids serving messages with raw UTF-8 headers, so the
 	// returned Mailbox must downgrade them (RFC 6857), and [Message.Size] must
-	// count the downgraded bytes that Retrieve returns.
+	// count the downgraded bytes that Retrieve returns. A message with no
+	// downgraded form is refused with [ErrUTF8Required] instead.
 	AuthenticateUTF8(user, pass string, utf8 bool) (Mailbox, error)
 }
 
@@ -207,7 +208,9 @@ type Mailbox interface {
 	// Retrieve returns the full RFC 5322 bytes of the message with the given UID.
 	// RETR and TOP serve these bytes with line endings canonicalized to CRLF and
 	// RFC 1939 dot-stuffing applied; a bare LF in the returned bytes is treated
-	// as a line boundary and normalized to CRLF on the wire.
+	// as a line boundary and normalized to CRLF on the wire. [ErrUTF8Required]
+	// refuses a message that needs UTF-8 mode with [UTF8]; any other error
+	// replies "-ERR Failed to retrieve message".
 	Retrieve(uid string) ([]byte, error)
 	// MarkSeen flags a message read after a successful RETR. POP3 has no read
 	// state of its own; implementations without one may return nil.

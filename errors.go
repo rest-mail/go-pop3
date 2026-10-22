@@ -38,3 +38,12 @@ var ErrSystemTemporary = errors.New("temporary system failure")
 // the same contract as ErrSystemTemporary but PASS replies with -ERR [SYS/PERM].
 // These errors classify system failures only, never invalid credentials.
 var ErrSystemPermanent = errors.New("permanent system failure")
+
+// ErrUTF8Required reports that a message cannot be served outside UTF-8 mode
+// (RFC 6856 §5): it has raw UTF-8 headers and the [Mailbox] offers no
+// downgraded form. Mailbox.Retrieve may return it, directly or wrapped, to a
+// session whose login reported utf8=false. When the Backend is a [UTF8Backend]
+// and the client has not issued UTF8, RETR and TOP reply with -ERR [UTF8] and
+// mark nothing seen; otherwise the client could not act on the code, so the
+// reply is the plain retrieval failure.
+var ErrUTF8Required = errors.New("message requires UTF-8 mode")
