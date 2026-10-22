@@ -20,6 +20,30 @@ Requirements below paraphrase the primary texts:
 [RFC 8314](https://www.rfc-editor.org/rfc/rfc8314.txt).
 `Normative` denotes protocol text without an explicit RFC 2119 keyword.
 
+## RFC 1939: additional core command and state requirements
+
+These public Session/net.Pipe proofs exercise all ASCII case permutations of
+core command keywords, exact backend credential arguments (including 40-character
+arguments), a fresh session over the same in-memory maildrop, and a transient
+Retrieve error with partial bytes. The partial bytes must not start a positive
+multiline reply or leak into the following command's response. Empty command
+lines are syntax errors, including while USER is pending; they must receive a
+negative reply and consume that pending USER just like other invalid commands.
+The lock and resource rows explicitly record host integration duties and the
+current API gap; `n/a` does not mean those RFC duties have been fulfilled.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-CORE-01 | RFC 1939 §3 | Normative | Accept every ASCII case permutation of USER, PASS, STAT, LIST, RETR, DELE, NOOP, RSET and QUIT keywords, preserving their command semantics and response framing. | TestCoreCommandCasePermutations |
+| POP3-CORE-02 | RFC 1939 §3 | MUST | Answer a syntactically invalid empty command with negative status in AUTHORIZATION and TRANSACTION; preserve transaction deletion marks. | TestEmptyCommandRefusal |
+| POP3-USER-02 | RFC 1939 §§3, 7 (USER) | Normative | Interpret case insensitivity on the keyword only: deliver the mailbox-identifying argument unchanged to the backend that defines its significance. | TestCredentialArgumentsPreserved |
+| POP3-PASS-06 | RFC 1939 §§3, 7 (PASS) | Normative | Deliver the server/mailbox-specific password argument unchanged, including case and embedded spaces. | TestCredentialArgumentsPreserved |
+| POP3-AUTH-05 | RFC 1939 §4 | Normative | Enter TRANSACTION with no messages marked deleted, including a fresh session over the same maildrop after an earlier session aborted with deletion marks. | TestFreshSessionDeletionMarks |
+| POP3-RETR-03 | RFC 1939 §5 (RETR) | Normative | An unsuccessful RETR sends negative status rather than a positive multiline message; a later RETR may succeed in the same TRANSACTION. | TestRetrievalFailureRecovery |
+| POP3-LOCK-01 | RFC 1939 §4 | Normative | Acquire exclusive maildrop access as necessary before reporting successful authentication, preventing modification or removal before UPDATE. | n/a: host/backend integration duty; Session does not acquire storage locks and the Backend/Mailbox interfaces expose no lock operation. ErrInUse refusal is tested separately, not proof of actual exclusive ownership. |
+| POP3-LOCK-02 | RFC 1939 §4 | Normative | Release any acquired maildrop lock before rejecting maildrop access. | n/a: host/backend integration duty; no lock release callback exists when Authenticate or Messages fails, so the backend must arrange cleanup itself. |
+| POP3-UPDATE-07 | RFC 1939 §6 | Normative | Release the exclusive-access lock and all maildrop resources, then close the connection after UPDATE. | n/a: Session closes its connection (POP3-UPDATE-03), but Mailbox has no Close or unlock callback; actual storage resource and lock release cannot be asserted by a library wire test. |
+
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
 
 | ID | Section | Level | Requirement | Tests |
@@ -436,9 +460,10 @@ MarkSeen or Delete calls. A fresh immediate USER/PASS pair then succeeds with
 exactly one Authenticate and one Messages call, followed by QUIT/EOF and joined
 Handle. The existing immediate login and authentication-pipeline proofs remain.
 This proves selected invalidation paths, not the full USER-allowed sequence,
-APOP/SASL, mailbox locking or transport-window behavior. Blank lines retain the
-existing ignored-line policy; password spaces remain password data. Exact error
-prose is library behavior, not an RFC requirement.
+APOP/SASL, mailbox locking or transport-window behavior. POP3-CORE-02 now
+additionally covers empty-line refusal and pending-USER invalidation; password
+spaces remain password data. Exact error prose is library behavior, not an RFC
+requirement.
 
 ## Validation and boundaries
 
@@ -452,7 +477,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **99 rows: 95 mapped, 4 n/a / 70 named wire tests**.
+The exact current PARTIAL inventory is **108 rows: 101 mapped / 7 n/a, with 75 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must

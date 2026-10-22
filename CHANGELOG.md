@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Empty POP3 command lines now receive `-ERR` and invalidate a pending USER,
+  as RFC 1939 §3 requires for syntactically invalid commands; previously they
+  were silently ignored.
+
 - PASS failures after good credentials now carry RFC 3206 §4 system codes: a
   maildrop that fails to load replies `-ERR [SYS/TEMP] Failed to load mailbox`
   and a backend that returns no Mailbox replies
@@ -16,15 +20,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Nine RFC 1939 core command/state checklist rows: six mapped requirements
+  covering keyword case permutations, credential bytes, empty commands, fresh
+  deletion state and RETR failure recovery, plus three explicit backend lock
+  and resource lifecycle boundaries. The inventory remains partial.
+
 - Nine RFC 2449/2595 checklist rows: TOP/UIDL capability contracts, combined
   CAPA configuration grammar, optional extended codes, and STLS with a verified
   client certificate are backed by five new public-Session wire tests. Four
   explicit n/a reasons cover unsupported SASL/IMPLEMENTATION, unavailable host
   retention policy and client capability-cache duties. The partial README badge
-  includes these gaps in its denominator (95/99 mapped).
+  includes these gaps in its denominator (101/108 mapped).
 
 - README coverage-gate and partial RFC checklist badges, checked by tests
   against the CI coverage minimum and the checklist's actual test mappings.
+
 - POP3-LENGTH-02 (`TestResponseFirstLineLimit`) proves RFC 2449 §4: the first
   response line, including the greeting, stays within 512 octets for
   maximum-length commands in both states.

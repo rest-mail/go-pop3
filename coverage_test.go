@@ -162,12 +162,13 @@ func TestNopLimiter(t *testing.T) {
 	l.Release("192.0.2.1")
 }
 
-// An empty command line gets no reply: the next reply belongs to the next
-// command.
-func TestPOP3_EmptyLineIgnored(t *testing.T) {
+// An empty command line gets an error without consuming the next command.
+func TestPOP3_EmptyLineRejected(t *testing.T) {
 	m := newMockBackend()
 	h := newPOP3Harness(t, m)
-	h.send("")
+	if got := h.cmd(""); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("empty command = %q, want -ERR", got)
+	}
 	if got := h.cmd("USER %s", m.user); !strings.HasPrefix(got, "+OK") {
 		t.Fatalf("reply after an empty line = %q, want USER's +OK", got)
 	}
