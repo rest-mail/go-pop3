@@ -9,7 +9,8 @@ import (
 )
 
 // Unknown keywords have RFC 1939's three/four-letter shape. APOP and AUTH
-// are optional authentication commands that this implementation does not handle.
+// are optional authentication commands that these fixtures do not handle: APOP
+// is not implemented, and AUTH needs a SASLBackend (see sasl_test.go).
 // Mixed-case controls exercise dispatch without claiming APOP/SASL support.
 var unsupportedCommands = []struct{ name, command string }{
 	{"unknown-three", "ZZZ"},

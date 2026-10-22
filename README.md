@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![Partial checklist: 95/99 mapped](https://img.shields.io/badge/partial%20checklist-95%2F99%20mapped-blue)](CHECKLIST.md)
+[![Partial checklist: 104/107 mapped](https://img.shields.io/badge/partial%20checklist-104%2F107%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -31,15 +31,19 @@ so what the client downloads is exactly what you stored.
 - STARTTLS via `STLS` ([RFC 2595](https://www.rfc-editor.org/rfc/rfc2595)) on the
   plaintext port, and implicit TLS on the secure port — both from one
   `*tls.Config`.
-- Credentials are never sent in the clear: when TLS is configured, `USER` is
-  refused until the connection is secured.
+- `AUTH` with SASL `PLAIN` ([RFC 5034](https://www.rfc-editor.org/rfc/rfc5034),
+  [RFC 4616](https://www.rfc-editor.org/rfc/rfc4616)) when the backend
+  implements `SASLBackend`; without it `AUTH` stays an unknown command.
+- Credentials are never sent in the clear: when TLS is configured, `USER` and
+  `AUTH` are refused until the connection is secured.
 - Credentials stay out of the debug log. Each received command line is logged at
   debug level as follows: `PASS`, `APOP` and `AUTH` keep their keyword and log
   `<redacted>` for the argument; other known commands are logged as sent; and
   any other line, such as ` PASS x`, `PASS<TAB>x`, a lookalike like `paſs x` or a
   password typed on its own, is logged only as `<unknown command redacted>`.
 - `CAPA` capability advertisement ([RFC 2449](https://www.rfc-editor.org/rfc/rfc2449)):
-  `USER`, `STLS`, `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
+  `USER`, `SASL PLAIN` for a `SASLBackend` while `AUTH` is accepted, `STLS`,
+  `TOP`, `UIDL`, `RESP-CODES`, `AUTH-RESP-CODE`
   ([RFC 3206](https://www.rfc-editor.org/rfc/rfc3206)), `PIPELINING`,
   `LOGIN-DELAY` for a `LoginDelayBackend`, and
   `UTF8` ([RFC 6856](https://www.rfc-editor.org/rfc/rfc6856)) when the backend
@@ -164,6 +168,15 @@ records nor resets credential failures or checks for a ban. A successful
 Unclassified authentication errors remain credential failures (`AUTH`);
 unclassified `Messages` errors remain `SYS/TEMP`. These sentinels classify
 login-opening errors; transaction commands keep their existing error behavior.
+
+To accept `AUTH PLAIN`, implement `pop3.SASLBackend`. Its
+`AuthenticatePlain(authzid, authcid, pass, utf8)` receives the decoded RFC 4616
+fields and returns the same errors as `Authenticate`, with the same response
+codes: a credential failure replies `-ERR [AUTH]` and counts toward the
+`Limiter` ban like a failed PASS. `authzid` is empty unless the client asks to
+act as another identity; reject it if you do not support that. CAPA lists
+`SASL PLAIN` only while `AUTH PLAIN` is accepted, so with a TLS config it
+appears after `STLS` (or on the implicit-TLS port).
 
 ## Server
 

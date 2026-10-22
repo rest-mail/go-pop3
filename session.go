@@ -3,6 +3,7 @@ package pop3
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // maxCommandLine bounds a single client command line, including its CRLF. RFC
@@ -142,6 +144,10 @@ func (s *Session) Handle() {
 			s.handleUser(arg)
 		case "PASS":
 			s.handlePass(arg)
+		case "AUTH":
+			if s.handleAuth(arg) {
+				return
+			}
 		case "STAT":
 			if !s.rejectArg(arg) {
 				s.handleStat()
@@ -198,6 +204,9 @@ func (s *Session) readCommandLine() (string, error) {
 func (s *Session) handleCapa() {
 	s.ok("Capability list follows")
 	s.sendLine("USER")
+	if s.saslOffered() {
+		s.sendLine("SASL PLAIN")
+	}
 	if !s.usingTLS && s.tlsConfig != nil {
 		s.sendLine("STLS")
 	}
@@ -334,8 +343,6 @@ func (s *Session) handlePass(arg string) {
 		return
 	}
 
-	ip := extractIP(s.conn.RemoteAddr().String())
-
 	var mailbox Mailbox
 	var err error
 	if b, ok := s.backend.(UTF8Backend); ok {
@@ -343,6 +350,89 @@ func (s *Session) handlePass(arg string) {
 	} else {
 		mailbox, err = s.backend.Authenticate(username, arg)
 	}
+	s.login(username, mailbox, err)
+}
+
+// saslOffered reports whether AUTH PLAIN is accepted now, which is when CAPA
+// lists it: the Backend must be a [SASLBackend], and a configured TLS layer
+// must be active, as for USER.
+func (s *Session) saslOffered() bool {
+	_, ok := s.backend.(SASLBackend)
+	return ok && (s.usingTLS || s.tlsConfig == nil)
+}
+
+// handleAuth runs the RFC 5034 AUTH command with the only mechanism offered,
+// SASL PLAIN (RFC 4616). The client response comes either as the initial
+// response argument or on the line after an empty "+ " challenge. It reports
+// whether the session must end because the response line could not be read.
+func (s *Session) handleAuth(arg string) bool {
+	b, ok := s.backend.(SASLBackend)
+	if !ok {
+		s.err("Unknown command")
+		return false
+	}
+	if s.auth.authenticated {
+		s.err("Already authenticated")
+		return false
+	}
+	if !s.usingTLS && s.tlsConfig != nil {
+		s.err("TLS required")
+		return false
+	}
+	mechanism, response, initial := strings.Cut(arg, " ")
+	if mechanism == "" {
+		s.err("Mechanism required")
+		return false
+	}
+	if upperASCII(mechanism) != "PLAIN" {
+		s.err("Unsupported mechanism")
+		return false
+	}
+	if !initial {
+		s.write("+ \r\n")
+		line, err := s.readCommandLine()
+		if errors.Is(err, errLineTooLong) {
+			s.err("Command line too long")
+			return true
+		}
+		if err != nil {
+			return true
+		}
+		response = strings.TrimRight(line, "\r\n")
+		// RFC 5034 §4: a lone "*" cancels the exchange.
+		if response == "*" {
+			s.err("Authentication cancelled")
+			return false
+		}
+	}
+	// RFC 5034 §4: an initial response of "=" is empty, and a response that
+	// does not decode rejects the command.
+	if response == "=" {
+		response = ""
+	}
+	decoded, err := base64.StdEncoding.DecodeString(response)
+	if err != nil {
+		s.err("Invalid base64 response")
+		return false
+	}
+	// RFC 4616 §2: [authzid] NUL authcid NUL passwd, all UTF-8, with a
+	// non-empty authcid and passwd.
+	fields := strings.Split(string(decoded), "\x00")
+	if len(fields) != 3 || fields[1] == "" || fields[2] == "" || !utf8.Valid(decoded) {
+		s.err("Invalid PLAIN response")
+		return false
+	}
+	mailbox, err := b.AuthenticatePlain(fields[0], fields[1], fields[2], s.utf8)
+	s.login(fields[1], mailbox, err)
+	return false
+}
+
+// login finishes a USER/PASS or AUTH attempt with the Backend's answer: it
+// replies with the right response code, keeps the [Limiter] up to date, and on
+// success loads the maildrop and enters TRANSACTION.
+func (s *Session) login(username string, mailbox Mailbox, err error) {
+	ip := extractIP(s.conn.RemoteAddr().String())
+
 	if errors.Is(err, ErrInUse) {
 		// ErrInUse is a backend assertion that the credentials were valid;
 		// contention must not earn an authentication-failure ban.
