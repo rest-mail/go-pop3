@@ -482,7 +482,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this partial mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current PARTIAL inventory is **127 rows: 114 mapped / 13 n/a, with 84 named wire tests**.
+The exact current PARTIAL inventory is **152 rows: 123 mapped / 29 n/a, with 87 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -651,6 +651,72 @@ Negative control: with the `s.utf8 = false` reset after STLS removed from
 `session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
 utf8=true.
 
-This section is still not a complete inventory. The other sections cover the
-requirements chosen so far, and no line-by-line pass over every RFC has been
-made, so the checklist stays PARTIAL.
+This section is still not a complete inventory. RFC 1939 and RFC 2449 have had
+a line-by-line pass (see the audit records below); RFC 2595, 3206, 4616, 5034,
+6856 and 8314 have not, so the checklist stays PARTIAL.
+
+## RFC 1939: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 1939 was read line by line, §§1–13, for
+every requirement: the upper-case MUST/MAY keywords and the lower-case
+"must", "should", "required", "may NOT", "never" and "In no case" that the RFC
+uses in their place (it predates RFC 2119). Each one was matched to a row above
+or added below. A lower-case word is recorded at the level of the
+matching upper-case keyword. Already covered: §3 unrecognized/invalid commands
+(POP3-COMMAND-01/02, POP3-CORE-02), the §3 autologout timer (POP3-IDLE-*), the
+§4 greeting, lock and open-failure rules (POP3-AUTH-01/03, POP3-LOCK-*), the §5
+drop/scan listing formats and deletion marks (POP3-STAT-*, POP3-LIST-*,
+POP3-RETR-*, POP3-DELE-01), §6 UPDATE (POP3-UPDATE-*), §7 TOP/UIDL/USER/PASS
+(POP3-TOP-*, POP3-UIDL-*, POP3-USER-*, POP3-PASS-*), APOP (POP3-APOP-01) and the
+§10 example (POP3-EXAMPLE-01). §3's command syntax (printable ASCII, single
+SPACE separators, 40-octet arguments) and 512-octet responses carry no
+requirement keyword; the response limit is asserted on every line the wire
+helper reads, and argument length is POP3-LENGTH-*. Client-only duties (§3
+multi-line parsing, §7 "the client must first issue USER") are not server
+rows. The rows below are what the pass found missing. RFC 1939 has no
+requirement left without a row; that does not make the other RFCs complete.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-STATUS-01 | RFC 1939 §3 | MUST | Send `+OK` and `-ERR` in upper case on every reply: greeting, positive and negative replies in both states, multi-line first lines and QUIT. | TestRFC1939StatusIndicatorCase |
+| POP3-STATUS-02 | RFC 1939 §5 (STAT, LIST) | SHOULD | Minimal implementations end the drop listing and each scan listing with CRLF right after the size: `+OK 2 59`, `+OK 2 17`, `1 42`. | TestRFC1939StatusIndicatorCase |
+| POP3-STATE-01 | RFC 1939 §3 | MUST | Reply negatively to a command issued in the wrong state: every TRANSACTION command (with and without arguments) at the greeting and after an accepted USER, and USER/PASS after login. No backend call; login, marks and the later QUIT update are unaffected. | TestRFC1939WrongStateMatrix |
+| POP3-CORE-03 | RFC 1939 §7 | MUST | Support the minimal commands (USER, PASS, QUIT, STAT, LIST, RETR, DELE, NOOP, RSET) in every implementation. | TestCoreCommandCasePermutations |
+| POP3-MECH-01 | RFC 1939 §4 | MUST | Support at least one authentication mechanism: USER/PASS works with every Backend, with no extension interface. | TestRFC1939UserNegativeThenRetry |
+| POP3-USER-03 | RFC 1939 §§7, 13 (USER) | MAY | Reply `+OK` to USER even if no such mailbox exists. USER does not consult the backend, so its reply is the same for known and unknown names and gives attackers no clue; the failure comes at PASS. | TestRFC1939UserNegativeThenRetry |
+| POP3-USER-04 | RFC 1939 §7 (USER) | Normative | After `-ERR` to USER the client may start a new authentication or QUIT: a later USER/PASS logs in, and QUIT replies `+OK` and closes with no backend call. | TestRFC1939UserNegativeThenRetry |
+| POP3-OCTET-01 | RFC 1939 §11 | MUST NOT | Count each stored end-of-line as two octets (CRLF) and never count byte-stuffed leading dots twice. | n/a: host duty. LIST/STAT report the Message.Size the Mailbox supplies; the exported OctetCount helper does the §11 count and is pinned by the root octetsize_test.go, outside this package's scope. |
+| POP3-UIDL-07 | RFC 1939 §7 (UIDL) | SHOULD | Never reuse a unique-id in a maildrop while the entity using it exists. | n/a: host duty. UIDs come unchanged from the Backend; the engine keeps no UID history (persistence within the engine is POP3-UIDL-05/06). |
+| POP3-UIDL-08 | RFC 1939 §7 (UIDL) | SHOULD | Clients handle two identical messages that share a hash-derived unique-id. | n/a: client duty. The server passes duplicate Backend UIDs through unchanged. |
+| POP3-APOP-02 | RFC 1939 §7 (APOP) | MUST | The APOP greeting timestamp differs on every greeting; take care with the shared secret. | n/a: APOP is not implemented and the greeting has no timestamp (POP3-APOP-01). |
+| POP3-APOP-03 | RFC 1939 §13 | SHOULD | A server with both PASS and APOP allows only one of them per mailbox. | n/a: APOP is not implemented. |
+| POP3-SITE-01 | RFC 1939 §8 | SHOULD | Operators tell users about quotas and retention policy; clients must not rely on site deletion; download-and-delete sites never delete without QUIT. | n/a: operator and client duties. The engine part, no removal without QUIT, is POP3-UPDATE-05. |
+| POP3-SEC-01 | RFC 1939 §13 | Normative | PASS, RETR and TOP send passwords and mail in the clear. | n/a: no requirement. Encryption is RFC 2595 STLS (POP3-STLS-*) and RFC 8314 implicit TLS (POP3-ITLS-*). |
+
+## RFC 2449: line-by-line audit additions
+
+**Audit record (2026-10-22).** RFC 2449 was read line by line, §§1–10, for
+every RFC 2119 keyword (MUST, MUST NOT, SHOULD, MAY; it uses no SHALL or
+RECOMMENDED). Each one was matched to a row above or added below. Already
+covered: the §4 255-octet command length and 512-octet first line
+(POP3-LENGTH-01/02), §5 CAPA in both states and its grammar (POP3-CAPA-01/02/03/11),
+§6.1–6.9 per-capability text (POP3-CAPA-04 to 10, POP3-SASL-01), §6.6
+PIPELINING processing in turn (POP3-PIPELINING-02 to 07), and §8 response codes
+(POP3-RESP-CODES-*). The §3 grammar's APOP timestamp ("MUST conform to RFC-822
+msg-id") is POP3-APOP-02. The rows below are what the pass found missing. No
+new wire test was needed: the two mapped rows are asserted by existing tests,
+which now name them.
+
+| ID | Section | Level | Requirement | Tests |
+|----|---------|-------|-------------|-------|
+| POP3-CAPA-12 | RFC 2449 §5 | MUST | Announce every AUTHORIZATION capability in TRANSACTION too, in every configuration: with and without STLS, LOGIN-DELAY, UTF8 and SASL. Only LOGIN-DELAY's argument may change after login. | TestCapaConfiguredGrammar, TestSASLCapability |
+| POP3-LDELAY-03 | RFC 2449 §6.5 | SHOULD | When the delay varies per user, append `USER` to LOGIN-DELAY in AUTHORIZATION and announce the user's own value in TRANSACTION. | TestCapaLoginDelay |
+| POP3-LDELAY-01 | RFC 2449 §6.5 | SHOULD | A server that advertises LOGIN-DELAY enforces it. | n/a: host duty. The Backend refuses an early login with ErrLoginDelay; the engine's reply is POP3-RESP-CODES-06. |
+| POP3-LDELAY-02 | RFC 2449 §6.5 | MUST | When the delay varies per user, announce in AUTHORIZATION the largest value that could apply to any user. | n/a: host duty. The value comes from LoginDelayBackend.LoginDelay and is announced unchanged (POP3-CAPA-05). |
+| POP3-LENGTH-03 | RFC 2449 §4 | MUST | Support the largest command length that any supported capability specifies. | n/a: no capability this library announces specifies more than 255 octets (POP3-LENGTH-01); the AUTH response line is read up to the 1024-octet cap (POP3-SASL-POLICY-01). |
+| POP3-CAPA-13 | RFC 2449 §5 | MUST | A capability description documents the states it is announced in, where its commands are valid, and whether its argument can change after login. | n/a: duty on capability specifications, not on servers. |
+| POP3-CAPA-14 | RFC 2449 §5 | SHOULD | A capability tag for a command is identical to the command keyword. | n/a: duty on capability specifications. The tags this library announces (TOP, UIDL, USER, STLS, UTF8) already match their keywords. |
+| POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. | n/a: EXPIRE is not announced (POP3-CAPA-09). |
+| POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 clients MAY assume an implicit DELE for each downloaded message. | n/a: host retention policy has no Backend API, and EXPIRE is not announced (POP3-CAPA-09). |
+| POP3-CLIENT-01 | RFC 2449 §§5, 6.5, 6.6, 6.9, 7, 8 | MUST | Client duties: reissue CAPA after an integrity layer, use LOGIN-DELAY for check intervals, track pipelined commands and stay within the TCP window, never change behavior on IMPLEMENTATION, never require an extension for basic function, and ignore unknown response-code detail. | n/a: client duties. This library is a server only. |
+| POP3-IANA-01 | RFC 2449 §9 | MUST | New capabilities and response codes are defined in an RFC with the listed details; new capability names never begin with `X`. | n/a: registration duty. The library announces only registered capabilities and codes (exact lists in POP3-CAPA-11 and POP3-RESP-CODES-*). |

@@ -107,7 +107,7 @@ func expectSASL(t *testing.T, got []string, offered bool) {
 // RFC 2449 §6.3, RFC 5034 §3: a server supporting AUTH lists SASL with its
 // mechanisms in both states. Only a SASLBackend offers it, and only while
 // AUTH PLAIN is accepted: with a TLS config, not before STLS.
-// checklist: POP3-CAPA-08 POP3-SASL-01
+// checklist: POP3-CAPA-08 POP3-SASL-01 POP3-CAPA-12
 func TestSASLCapability(t *testing.T) {
 	t.Run("without-backend", func(t *testing.T) {
 		w := connect(t, backend{password: "secret"})

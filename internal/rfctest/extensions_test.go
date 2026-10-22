@@ -135,7 +135,7 @@ func (b extensionUTF8DelayBackend) AuthenticateUTF8(user, pass string, _ bool) (
 	return b.Authenticate(user, pass)
 }
 
-// checklist: POP3-CAPA-11
+// checklist: POP3-CAPA-11 POP3-CAPA-12
 func TestCapaConfiguredGrammar(t *testing.T) {
 	for _, secured := range []bool{false, true} {
 		for _, delay := range []bool{false, true} {

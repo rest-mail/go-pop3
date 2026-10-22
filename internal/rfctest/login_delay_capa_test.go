@@ -60,7 +60,7 @@ func loginDelayCapa(t *testing.T, w *wire) string {
 // RFC 2449 §6.5: LOGIN-DELAY announces the minimum seconds between logins in
 // both states, optionally followed by USER in AUTHORIZATION state when the
 // value varies per user; after login CAPA carries the user's own value.
-// checklist: POP3-CAPA-05
+// checklist: POP3-CAPA-05 POP3-LDELAY-03
 func TestCapaLoginDelay(t *testing.T) {
 	own := func(n int) *int { return &n }
 	for _, tc := range []struct {
