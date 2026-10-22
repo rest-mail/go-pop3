@@ -477,7 +477,7 @@ Every test in that package must map to this checklist. Existing root tests and
 fuzz targets remain outside this mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
-The exact current inventory is **204 rows: 153 mapped / 51 n/a, with 96 named wire tests**.
+The exact current inventory is **204 rows: 154 mapped / 50 n/a, with 97 named wire tests**.
 Example negative-control inputs replace
 `TestRFC1939AdaptedTransactionExample` in its row with `TestMissingSessionVector`,
 or remove the `POP3-EXAMPLE-01` row while retaining the test annotation; both must
@@ -639,12 +639,14 @@ certificate. The n/a rows marked "known gap" are unmet duties, not met ones.
 | POP3-UTF8-07 | RFC 6856 §2.2 | SHOULD | A server announcing `UTF8 USER` applies SASLprep to USER/PASS arguments and rejects prohibited characters. | n/a: the USER argument is not announced (POP3-UTF8-01), so this conditional duty does not apply. |
 | POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). | n/a: known gap. USER/PASS arguments reach the Backend unchecked. Rejecting them in the engine would also refuse 8-bit legacy credentials, which is an owner decision. AUTH PLAIN already rejects non-UTF-8 (POP3-SASL-05). |
 | POP3-UTF8-09 | RFC 6856 §3 | Normative | The optional LANG capability and command select the language of human-readable response text. | n/a: LANG is not implemented or announced; the command is unknown (POP3-COMMAND-01). |
-| POP3-UTF8-10 | RFC 6856 §5 | Normative | A LIST/TOP/RETR refused because the message needs UTF-8 mode carries the `[UTF8]` response code. | n/a: known gap. Mailbox errors have no way to ask for `[UTF8]`; such refusals reply with plain `-ERR`. |
+| POP3-UTF8-10 | RFC 6856 §5 | Normative | A LIST/TOP/RETR refused because the message needs UTF-8 mode carries the `[UTF8]` response code. A Retrieve returning ErrUTF8Required (direct or wrapped) makes RETR and TOP reply `-ERR [UTF8]` and mark nothing seen, when the Backend announces UTF8 and the session is not in UTF-8 mode; otherwise, and for other errors, the reply stays plain. LIST is never refused. | TestUTF8ResponseCode |
 | POP3-APOP-01 | RFC 1939 §7 (APOP); RFC 6856 §2.2 | Normative | The optional APOP command authenticates with an MD5 digest of the greeting timestamp and a shared secret; with UTF-8 credentials the digest uses SASLprep. | n/a: APOP is not implemented and the greeting carries no timestamp; APOP gets `-ERR` in both states (POP3-COMMAND-02). |
 
 Negative control: with the `s.utf8 = false` reset after STLS removed from
 `session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
 utf8=true.
+With `retrieveFailed` in `session.go` always sending the plain reply,
+TestUTF8ResponseCode fails its direct and wrapped cases.
 
 Every RFC this library implements (1939, 2449, 2595, 3206, 4616, 5034, 6856
 and 8314) has had a line-by-line pass; the dated audit records follow.

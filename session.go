@@ -720,7 +720,7 @@ func (s *Session) handleRetr(arg string) {
 
 	rawBytes, err := s.mailbox.Retrieve(msg.UID)
 	if err != nil {
-		s.err("Failed to retrieve message")
+		s.retrieveFailed(err)
 		return
 	}
 	// Canonicalize line endings to CRLF first: a bare LF in stored content must
@@ -748,6 +748,19 @@ func (s *Session) handleRetr(arg string) {
 		_ = s.mailbox.MarkSeen(msg.UID)
 		s.messages[n-1].Seen = true
 	}
+}
+
+// retrieveFailed answers a RETR or TOP whose Retrieve failed. A message that
+// needs UTF-8 mode gets [UTF8] (RFC 6856 §5) only when the client could enable
+// that mode; any other error text stays private.
+func (s *Session) retrieveFailed(err error) {
+	if errors.Is(err, ErrUTF8Required) && !s.utf8 {
+		if _, ok := s.backend.(UTF8Backend); ok {
+			s.err("[UTF8] Message requires UTF-8 mode")
+			return
+		}
+	}
+	s.err("Failed to retrieve message")
 }
 
 func (s *Session) handleTop(arg string) {
@@ -781,7 +794,7 @@ func (s *Session) handleTop(arg string) {
 	msg := s.messages[n-1]
 	rawBytes, err := s.mailbox.Retrieve(msg.UID)
 	if err != nil {
-		s.err("Failed to retrieve message")
+		s.retrieveFailed(err)
 		return
 	}
 	// Canonicalize line endings to CRLF first, so a bare LF cannot hide a line
