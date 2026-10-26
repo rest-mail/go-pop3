@@ -42,9 +42,9 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-PASS-06 | RFC 1939 §§3, 7 (PASS) | Normative | Deliver the server/mailbox-specific password argument unchanged, including case and embedded spaces. | TestCredentialArgumentsPreserved |
 | POP3-AUTH-05 | RFC 1939 §4 | Normative | Enter TRANSACTION with no messages marked deleted, including a fresh session over the same maildrop after an earlier session aborted with deletion marks. | TestFreshSessionDeletionMarks |
 | POP3-RETR-03 | RFC 1939 §5 (RETR) | Normative | An unsuccessful RETR sends negative status rather than a positive multiline message; a later RETR may succeed in the same TRANSACTION. | TestRetrievalFailureRecovery |
-| POP3-LOCK-01 | RFC 1939 §4 | Normative | Acquire exclusive maildrop access as necessary before reporting successful authentication, preventing modification or removal before UPDATE. | n/a: host/backend integration duty; Session does not acquire storage locks and the Backend/Mailbox interfaces expose no lock operation. ErrInUse refusal is tested separately, not proof of actual exclusive ownership. |
-| POP3-LOCK-02 | RFC 1939 §4 | Normative | Release any acquired maildrop lock before rejecting maildrop access. | n/a: host/backend integration duty; no lock release callback exists when Authenticate or Messages fails, so the backend must arrange cleanup itself. |
-| POP3-UPDATE-07 | RFC 1939 §6 | Normative | Release the exclusive-access lock and all maildrop resources, then close the connection after UPDATE. | n/a: Session closes its connection (POP3-UPDATE-03), but Mailbox has no Close or unlock callback; actual storage resource and lock release cannot be asserted by a library wire test. |
+| POP3-LOCK-01 | RFC 1939 §4 | Normative | Acquire exclusive maildrop access as necessary before reporting successful authentication, preventing modification or removal before UPDATE. | n/a: host/backend integration duty; Session does not acquire storage locks and the Backend/Mailbox interfaces expose no lock operation. ErrInUse refusal is tested separately, not proof of actual exclusive ownership. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
+| POP3-LOCK-02 | RFC 1939 §4 | Normative | Release any acquired maildrop lock before rejecting maildrop access. | n/a: host/backend integration duty; no lock release callback exists when Authenticate or Messages fails, so the backend must arrange cleanup itself. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
+| POP3-UPDATE-07 | RFC 1939 §6 | Normative | Release the exclusive-access lock and all maildrop resources, then close the connection after UPDATE. | n/a: Session closes its connection (POP3-UPDATE-03), but Mailbox has no Close or unlock callback; actual storage resource and lock release cannot be asserted by a library wire test. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
 
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
 
@@ -73,7 +73,7 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-CAPA-06 | RFC 2449 §6.1 | Normative | Announce parameterless TOP unchanged in both states; the advertised command is usable only in TRANSACTION. | TestCapaTopContract |
 | POP3-CAPA-07 | RFC 2449 §6.8 | Normative | Announce parameterless UIDL unchanged in both states; the advertised single and multiline commands are usable only in TRANSACTION. | TestCapaUIDLContract |
 | POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | TestSASLCapability |
-| POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. |
+| POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
 | POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | TestCapaImplementation, TestCapaImplementationRequiresBackend |
 | POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8, IMPLEMENTATION (both states or TRANSACTION only) and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
 
@@ -179,7 +179,7 @@ universal RFC mandates. POP3-STLS-07 is also library policy: RFC 2595 does not
 spell out buffered-input handling, but the STARTTLS command-injection class
 (CVE-2011-0411) is avoided by never reading plaintext octets past the STLS line
 under TLS. A temporary control that carried the buffered octets into the TLS
-reader (session.go restored byte-for-byte) authenticated the injected USER/PASS
+reader (pkg/pop3/server/session.go restored byte-for-byte) authenticated the injected USER/PASS
 and failed the test. Nil TLS configuration permits plaintext authentication.
 
 | ID | Section | Level | Requirement | Tests |
@@ -253,7 +253,7 @@ requires the relevant status and ordering, not those particular words.
 | POP3-PIPELINING-05 | RFC 2449 §6.6; RFC 1939 §5 | MUST | Process queued DELE, queries and RSET in turn; repeated batches observe deletion then restoration with stable message numbers and UIDs. | TestPipeliningStateOrder |
 | POP3-PIPELINING-06 | RFC 2449 §6.6 | MUST | Process a bounded CAPA/STAT/USER/PASS/STAT/CAPA/NOOP batch in turn across successful login, completing each capability block before subsequent replies and loading messages only after accepted credentials. | TestAuthPipeliningSuccess |
 | POP3-PIPELINING-07 | RFC 2449 §6.6 | MUST | Process a bounded failed USER/PASS, unauthenticated STAT, and fresh successful USER/PASS/STAT batch in turn with ordered replies and exactly the corresponding backend authentication and enumeration calls. | TestAuthPipeliningFailureRetry |
-| POP3-PIPELINING-POLICY-01 | Library policy (session.go authentication reset/retry) | Normative | Within one queued batch, a failed PASS clears pending USER: refuse PASS without fresh USER without calling Authenticate, retain AUTHORIZATION, and allow a fresh successful USER/PASS. | TestAuthPipeliningFailureRetry |
+| POP3-PIPELINING-POLICY-01 | Library policy (pkg/pop3/server/session.go authentication reset/retry) | Normative | Within one queued batch, a failed PASS clears pending USER: refuse PASS without fresh USER without calling Authenticate, retain AUTHORIZATION, and allow a fresh successful USER/PASS. | TestAuthPipeliningFailureRetry |
 
 The authentication batches additionally check CAPA multiline framing and exact
 Authenticate arguments/call order, with no Messages before accepted credentials,
@@ -368,8 +368,8 @@ library-policy rows; it does not make the policy an RFC requirement.
 |----|---------|-------|-------------|-------|
 | POP3-LENGTH-01 | RFC 2449 §§3–4 | MUST | Support 255-octet command lines including CRLF (proved for USER/PASS with complete credentials, including fragmented delivery). | TestCommandLength255Credentials |
 | POP3-LENGTH-02 | RFC 2449 §4 | Normative | Keep the first line of every response, including the greeting, within 512 octets including CRLF: maximum-length (255-octet) commands for every keyword in AUTHORIZATION and TRANSACTION, and a 1023-octet unknown command under the reader policy, each receive a bounded status line. | TestResponseFirstLineLimit |
-| POP3-LENGTH-POLICY-01 | Library policy (session.go bounded reader) | Normative | Accept complete 1024-byte USER/PASS lines including LF, preserving credential bytes; count UTF-8 bytes rather than runes. | TestCommandLengthPolicy1024Accepted |
-| POP3-LENGTH-POLICY-02 | Library policy (session.go bounded reader) | Normative | Refuse a 1024-byte buffer without LF with one error then close; do not authenticate or resynchronize a 1025-byte complete line or queued command. | TestCommandLengthPolicyOverflowCloses |
+| POP3-LENGTH-POLICY-01 | Library policy (pkg/pop3/server/session.go bounded reader) | Normative | Accept complete 1024-byte USER/PASS lines including LF, preserving credential bytes; count UTF-8 bytes rather than runes. | TestCommandLengthPolicy1024Accepted |
+| POP3-LENGTH-POLICY-02 | Library policy (pkg/pop3/server/session.go bounded reader) | Normative | Refuse a 1024-byte buffer without LF with one error then close; do not authenticate or resynchronize a 1025-byte complete line or queued command. | TestCommandLengthPolicyOverflowCloses |
 
 ## RFC 1939 §3: selected unknown and unimplemented command refusals
 
@@ -390,7 +390,7 @@ argument/state and queued unknown-command proofs remain in their sections above.
 |----|---------|-------|-------------|-------|
 | POP3-COMMAND-01 | RFC 1939 §3 | MUST | Reply to selected unrecognized commands with uppercase -ERR and CRLF in AUTHORIZATION and TRANSACTION. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
 | POP3-COMMAND-02 | RFC 1939 §3 | MUST | Reply to currently unimplemented optional APOP/AUTH commands with uppercase -ERR and CRLF in AUTHORIZATION and TRANSACTION. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
-| POP3-COMMAND-POLICY-01 | Library policy (session.go default dispatch) | Normative | Refusal keeps the session usable without authentication or backend read/delete side effects, preserving existing deletion marks until explicit RSET or QUIT. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
+| POP3-COMMAND-POLICY-01 | Library policy (pkg/pop3/server/session.go default dispatch) | Normative | Refusal keeps the session usable without authentication or backend read/delete side effects, preserving existing deletion marks until explicit RSET or QUIT. | TestCommandErrorsAuthorization, TestCommandErrorsTransaction |
 
 ## RFC 1939 §3: optional autologout timer
 
@@ -470,13 +470,13 @@ requirement.
 
 ## Validation and boundaries
 
-Run `go run ./internal/checklist internal/rfctest` from the module root. The
+Run `go run ./internal/checklist pkg/pop3/rfctest` from the module root. The
 checker and its generic negative tests are copied unchanged from go-spf commit
 `7d291c08d310b9c62afc287e75a534a39150fafb` (`internal/checklist`). The checker
 validates IDs and bidirectional named test mappings; it does not interpret RFC
-text or test assertions. `internal/rfctest` is a deliberately scoped package of
+text or test assertions. `pkg/pop3/rfctest` is a deliberately scoped package of
 real wire tests using the public Session API, an in-memory backend and net.Pipe.
-Every test in that package must map to this checklist. Existing root tests and
+Every test in that package must map to this checklist. Existing server and helper tests and
 fuzz targets remain outside this mapping; they are still run by CI.
 `internal/checklist` also tests mutations of this checklist and its annotations:
 missing mappings, unknown IDs and duplicate IDs must fail.
@@ -493,13 +493,13 @@ POP3-IDLE-01, POP3-IDLE-03, POP3-IDLE-04, POP3-IDLE-05, POP3-IDLE-06,
 POP3-IDLE-07 and POP3-IDLE-08.
 Generic checker source/tests remain pinned and unchanged.
 
-Immediate-PASS regression validation replaces only `session.go` with baseline
+Immediate-PASS regression validation replaces only `pkg/pop3/server/session.go` with baseline
 `fe05ed851f2765eb26af5568248892fd2d28fddc`: all 16 sequential/pipelined cases
 fail because stale PASS authenticates. Restoring the implementation makes all
 16 pass. The checker CLI validates the current inventory, and the generic and
 scoped mutation tests reject broken mappings.
 
-Autologout validation temporarily edits only `session.go`, restoring it
+Autologout validation temporarily edits only `pkg/pop3/server/session.go`, restoring it
 byte-for-byte (SHA-256 checked) after each control: a 9m59s deadline fails both
 idle tests on the ten-minute bound; a single deadline set before the command loop
 fails on zero renewals; deleting marked messages after the read error fails on
@@ -515,7 +515,7 @@ end its Read with `os.ErrDeadlineExceeded`, the client sees EOF with no response
 byte, the backend gets zero Delete calls and the messages are unchanged. Its
 temporary control makes `readCommandLine` return the buffered partial line on a
 read error: the partial QUIT is dispatched, UPDATE runs and the test fails;
-`session.go` was restored byte-for-byte (SHA-256 checked). Limits: the timeout is
+`pkg/pop3/server/session.go` was restored byte-for-byte (SHA-256 checked). Limits: the timeout is
 forced, not a real ten-minute wait; only QUIT variants are covered, not other
 partial commands; STLS and pre-login partial commands remain untested.
 
@@ -526,7 +526,7 @@ the past: the session must end its Read with `os.ErrDeadlineExceeded`
 (`net.Error.Timeout()` true), the client sees EOF with no response byte, `Handle`
 returns, and backend Authenticate (the only route to a mailbox) was called zero
 times. A complete USER before the timeout is independent of the partial-QUIT
-cases. Temporary controls on `session.go` (restored byte-for-byte, SHA-256
+cases. Temporary controls on `pkg/pop3/server/session.go` (restored byte-for-byte, SHA-256
 checked, no runtime file committed): writing `-ERR` on a read error fails both
 cases on the unexpected response byte; calling `backend.Authenticate` on a read
 error fails both on the Authenticate count. Limits: the timeout is forced, not a
@@ -557,7 +557,7 @@ Each deadline is at least ten minutes after both the server's final write
 pipe's read deadline into the past yields `os.ErrDeadlineExceeded` below TLS;
 the client then reads EOF from close_notify with no POP3 byte, `Handle` returns,
 Authenticate ran only for a PASS actually sent, and no Delete happened.
-Temporary controls on `session.go` (restored, SHA-256 checked): skipping the
+Temporary controls on `pkg/pop3/server/session.go` (restored, SHA-256 checked): skipping the
 renewal under TLS fails all three cases waiting for the renewed deadline;
 writing `-ERR` on a TLS read error fails all three on the response byte;
 running QUIT handling on a TLS read error with a mailbox fails the TRANSACTION
@@ -575,7 +575,7 @@ buffered and the session waits for its LF, with no sleep. Forcing the raw read
 deadline into the past then yields `os.ErrDeadlineExceeded` below TLS; the
 client reads EOF from close_notify with no POP3 byte, `Handle` returns,
 Authenticate ran only for a complete PASS, and no Delete happened. Temporary
-control on `session.go` (restored with git checkout): returning the buffered
+control on `pkg/pop3/server/session.go` (restored with git checkout): returning the buffered
 partial line on a read error dispatches it, and all six cases fail on the `+`
 response byte. Limits: the timeout is forced; only USER, PASS and QUIT partials
 are covered.
@@ -595,7 +595,7 @@ contract for AUTH/APOP/SASL, other extension requirements and CAPA configuration
 remaining RFC 2449 command-length/grammar and capability-specific maximum proofs,
 complete RFC vectors and differential testing,
 overall library coverage ≥95% toward 100%, coverage rationale and badges, and
-adoption of the shared reusable workflow. Keep library/root coverage separate
+adoption of the shared reusable workflow. Keep library/server coverage separate
 from checker/tool coverage. Existing parser fuzzing, octet-count and log-redaction
 work is prior work, not newly claimed here. This partial proof does not close
 #374 or the all-principals acceptance work in #376.
@@ -620,7 +620,7 @@ server challenges with data, security layers and the success data of
 | POP3-SASL-05 | RFC 5034 §4; RFC 4616 §2 | Normative | Refuse an unknown or missing mechanism, an empty initial response (`=`), and a PLAIN message without exactly three fields, with an empty authcid or password, or that is not UTF-8, without calling the Backend; a fresh AUTH can then succeed. | TestSASLPlainRejections |
 | POP3-SASL-06 | RFC 3206 §5; RFC 5034 §4 | Normative | A credential failure, including an authzid the Backend refuses, replies `-ERR [AUTH]`, is recorded with the Limiter like a failed PASS, and the failure that earns a ban replies `-ERR [AUTH] Too many authentication failures` and closes the session. | TestSASLPlainCredentialFailures |
 | POP3-SASL-07 | RFC 5034 §6; RFC 4616 §5; RFC 2595 §2.2 | Normative | With a TLS config, refuse AUTH before STLS like USER (`-ERR TLS required`, no Backend call, with or without initial response) so PLAIN never carries a password in the clear; after STLS it succeeds. | TestSASLPlainRequiresTLS |
-| POP3-SASL-POLICY-01 | Library policy (session.go AUTH response line) | Normative | The response line after the `+ ` challenge is capped at the largest PLAIN response, 1026 octets with CRLF (POP3-SASL-08): an unterminated over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |
+| POP3-SASL-POLICY-01 | Library policy (pkg/pop3/server/session.go AUTH response line) | Normative | The response line after the `+ ` challenge is capped at the largest PLAIN response, 1026 octets with CRLF (POP3-SASL-08): an unterminated over-long one replies `-ERR Command line too long` and closes, and a disconnect at the challenge ends the session; neither calls the Backend. | TestSASLPlainResponseLine |
 
 ## RFC 6856: UTF8 and the remaining optional authentication commands
 
@@ -640,15 +640,15 @@ certificate. The n/a rows marked "known gap" are unmet duties, not met ones.
 | POP3-UTF8-05 | RFC 6856 §§2.1, 4 | MUST | Outside UTF-8 mode, never send non-ASCII strings as is: send a surrogate message or fail the RETR/TOP with `-ERR`. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve; the engine reports the mode to AuthenticateUTF8 (POP3-UTF8-03) so the backend can choose the form. |
 | POP3-UTF8-06 | RFC 6856 §2.1 | SHOULD | The LIST size of a message matches the octets RETR sends, not counting byte-stuffing. | n/a: host duty. LIST reports the Message.Size the Mailbox supplies for the form it will serve. |
 | POP3-UTF8-07 | RFC 6856 §2.2 | SHOULD | A server announcing `UTF8 USER` applies SASLprep to USER/PASS arguments and rejects prohibited characters. | n/a: the USER argument is not announced (POP3-UTF8-01), so this conditional duty does not apply. |
-| POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). | n/a: known gap. USER/PASS arguments reach the Backend unchecked. Rejecting them in the engine would also refuse 8-bit legacy credentials, which is an owner decision. AUTH PLAIN already rejects non-UTF-8 (POP3-SASL-05). |
+| POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). | n/a: known gap. USER/PASS arguments reach the Backend unchecked. Rejecting them in the engine would also refuse 8-bit legacy credentials, which is an owner decision. AUTH PLAIN already rejects non-UTF-8 (POP3-SASL-05). Planned follow-up: [#86](https://github.com/rest-mail/go-pop3/issues/86). |
 | POP3-UTF8-09 | RFC 6856 §3 | Normative | The optional LANG capability and command select the language of human-readable response text. | n/a: LANG is not implemented or announced; the command is unknown (POP3-COMMAND-01). |
 | POP3-UTF8-10 | RFC 6856 §5 | Normative | A LIST/TOP/RETR refused because the message needs UTF-8 mode carries the `[UTF8]` response code. A Retrieve returning ErrUTF8Required (direct or wrapped) makes RETR and TOP reply `-ERR [UTF8]` and mark nothing seen, when the Backend announces UTF8 and the session is not in UTF-8 mode; otherwise, and for other errors, the reply stays plain. LIST is never refused. | TestUTF8ResponseCode |
 | POP3-APOP-01 | RFC 1939 §7 (APOP); RFC 6856 §2.2 | Normative | The optional APOP command authenticates with an MD5 digest of the greeting timestamp and a shared secret; with UTF-8 credentials the digest uses SASLprep. | n/a: APOP is not implemented and the greeting carries no timestamp; APOP gets `-ERR` in both states (POP3-COMMAND-02). |
 
 Negative control: with the `s.utf8 = false` reset after STLS removed from
-`session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
+`pkg/pop3/server/session.go`, TestUTF8ModeResetByTLS fails because the login after TLS reports
 utf8=true.
-With `retrieveFailed` in `session.go` always sending the plain reply,
+With `retrieveFailed` in `pkg/pop3/server/session.go` always sending the plain reply,
 TestUTF8ResponseCode fails its direct and wrapped cases.
 
 Every RFC this library implements (1939, 2449, 2595, 3206, 4616, 5034, 6856
@@ -684,7 +684,7 @@ requirement left without a row; that does not make the other RFCs complete.
 | POP3-MECH-01 | RFC 1939 §4 | MUST | Support at least one authentication mechanism: USER/PASS works with every Backend, with no extension interface. | TestRFC1939UserNegativeThenRetry |
 | POP3-USER-03 | RFC 1939 §§7, 13 (USER) | MAY | Reply `+OK` to USER even if no such mailbox exists. USER does not consult the backend, so its reply is the same for known and unknown names and gives attackers no clue; the failure comes at PASS. | TestRFC1939UserNegativeThenRetry |
 | POP3-USER-04 | RFC 1939 §7 (USER) | Normative | After `-ERR` to USER the client may start a new authentication or QUIT: a later USER/PASS logs in, and QUIT replies `+OK` and closes with no backend call. | TestRFC1939UserNegativeThenRetry |
-| POP3-OCTET-01 | RFC 1939 §11 | MUST NOT | Count each stored end-of-line as two octets (CRLF) and never count byte-stuffed leading dots twice. | n/a: host duty. LIST/STAT report the Message.Size the Mailbox supplies; the exported OctetCount helper does the §11 count and is pinned by the root octetsize_test.go, outside this package's scope. |
+| POP3-OCTET-01 | RFC 1939 §11 | MUST NOT | Count each stored end-of-line as two octets (CRLF) and never count byte-stuffed leading dots twice. | n/a: host duty. LIST/STAT report the Message.Size the Mailbox supplies; the exported OctetCount helper does the §11 count and is pinned by the pkg/pop3/server/octetsize_test.go, outside this package's scope. |
 | POP3-UIDL-07 | RFC 1939 §7 (UIDL) | SHOULD | Never reuse a unique-id in a maildrop while the entity using it exists. | n/a: host duty. UIDs come unchanged from the Backend; the engine keeps no UID history (persistence within the engine is POP3-UIDL-05/06). |
 | POP3-UIDL-08 | RFC 1939 §7 (UIDL) | SHOULD | Clients handle two identical messages that share a hash-derived unique-id. | n/a: client duty. The server passes duplicate Backend UIDs through unchanged. |
 | POP3-APOP-02 | RFC 1939 §7 (APOP) | MUST | The APOP greeting timestamp differs on every greeting; take care with the shared secret. | n/a: APOP is not implemented and the greeting has no timestamp (POP3-APOP-01). |
@@ -715,8 +715,8 @@ which now name them.
 | POP3-LENGTH-03 | RFC 2449 §4; RFC 5034 §4 | MUST | Support the largest command length that any supported capability specifies. Re-checked against RFC 5034 §4 on 2026-10-22: AUTH with an initial response keeps the 255-octet command limit (POP3-LENGTH-01), but a response line after the `+ ` challenge may be as long as the mechanism needs, so the largest PLAIN response (1026 octets with CRLF) is accepted. | TestCommandLength255Credentials, TestRFC5034LargestPlainResponse |
 | POP3-CAPA-13 | RFC 2449 §5 | MUST | A capability description documents the states it is announced in, where its commands are valid, and whether its argument can change after login. | n/a: duty on capability specifications, not on servers. |
 | POP3-CAPA-14 | RFC 2449 §5 | SHOULD | A capability tag for a command is identical to the command keyword. | n/a: duty on capability specifications. The tags this library announces (TOP, UIDL, USER, STLS, UTF8) already match their keywords. |
-| POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. | n/a: EXPIRE is not announced (POP3-CAPA-09). |
-| POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 clients MAY assume an implicit DELE for each downloaded message. | n/a: host retention policy has no Backend API, and EXPIRE is not announced (POP3-CAPA-09). |
+| POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. | n/a: EXPIRE is not announced (POP3-CAPA-09). Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
+| POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 clients MAY assume an implicit DELE for each downloaded message. | n/a: host retention policy has no Backend API, and EXPIRE is not announced (POP3-CAPA-09). Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
 | POP3-CLIENT-01 | RFC 2449 §§5, 6.5, 6.6, 6.9, 7, 8 | MUST | Client duties: reissue CAPA after an integrity layer, use LOGIN-DELAY for check intervals, track pipelined commands and stay within the TCP window, never change behavior on IMPLEMENTATION, never require an extension for basic function, and ignore unknown response-code detail. | n/a: client duties. This library is a server only. |
 | POP3-IANA-01 | RFC 2449 §9 | MUST | New capabilities and response codes are defined in an RFC with the listed details; new capability names never begin with `X`. | n/a: registration duty. The library announces only registered capabilities and codes (exact lists in POP3-CAPA-11 and POP3-RESP-CODES-*). |
 
@@ -739,7 +739,7 @@ was found in RFC 2595 itself.
 | POP3-STLS-11 | RFC 2595 §2.2 | SHOULD | Offer a privacy mode that refuses authentication until encryption is active: with a TLS config, USER and AUTH PLAIN are refused before STLS with no Backend call, and succeed after it. TLS cannot be turned off once started, so the "terminate if deactivated" case cannot arise. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
 | POP3-STLS-12 | RFC 2595 §2.2 | SHOULD | Offer a backward-compatible mode needing only the base protocol's mechanisms: with no TLS config, plaintext USER/PASS logs in. | TestAuthorizationUserPass |
 | POP3-STLS-13 | RFC 2595 §2.3 | MUST | Be configurable to refuse every clear-text login command and mechanism unless encryption is active: a TLS config refuses USER (so PASS has nothing to complete) and AUTH PLAIN with or without an initial response. APOP is not implemented. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
-| POP3-STLS-14 | RFC 2595 §2.3 | SHOULD | A server that allows clear-text logins can refuse them for the whole server and per user. | n/a: known gap. The whole-server switch is the TLS config (POP3-STLS-13). Per user needs the Backend to know whether the session is encrypted, which `Authenticate` is not told; adding that is an API decision for the owner. |
+| POP3-STLS-14 | RFC 2595 §2.3 | SHOULD | A server that allows clear-text logins can refuse them for the whole server and per user. | n/a: known gap. The whole-server switch is the TLS config (POP3-STLS-13). Per user needs the Backend to know whether the session is encrypted, which `Authenticate` is not told; adding that is an API decision for the owner. Planned follow-up: [#87](https://github.com/rest-mail/go-pop3/issues/87). |
 | POP3-STLS-15 | RFC 2595 §2.5 | MUST | The server checks the TLS negotiation result: a failed negotiation closes without authenticating. Which versions, suites and client certificates are acceptable is host policy in the `tls.Config`. | TestSTLSHandshakeFailure |
 | POP3-STLS-16 | RFC 2595 §4 | MUST | A server with STLS also implements the RFC 2449 extension mechanism, so STLS is announced through CAPA in AUTHORIZATION. | TestCapaBothStates, TestSTLSCredentials |
 | POP3-STLS-17 | RFC 2595 §4 | MAY | AUTH EXTERNAL authenticates with TLS client credentials. | n/a: EXTERNAL is not implemented and RFC 2595 does not require it; a client certificate grants nothing on its own (POP3-STLS-08). |
@@ -758,7 +758,7 @@ challenge exchanges (POP3-SASL-02/03), the `*` cancel and undecodable response
 at 1024 octets, so the largest PLAIN response RFC 4616 requires (1024 base64
 characters plus CRLF) was refused (POP3-SASL-08); and Go's `encoding/base64`
 skips CR and LF, so a response with a bare CR inside it was decoded instead of
-rejected (POP3-SASL-09). Negative control: with `session.go` from before the
+rejected (POP3-SASL-09). Negative control: with `pkg/pop3/server/session.go` from before the
 fix, the largest-response case times out and both bare-CR cases authenticate.
 POP3-LENGTH-03 was re-checked against §4's line-length text and is now mapped.
 
@@ -770,7 +770,7 @@ POP3-LENGTH-03 was re-checked against §4's line-length text and is now mapped.
 | POP3-SASL-11 | RFC 5034 §4 | MUST NOT | The empty challenge is exactly `+ ` with no other data. | TestSASLPlainExchange |
 | POP3-SASL-12 | RFC 5034 §4 | MUST | Reject an unsupported mechanism, a cancelled exchange and a failed authentication with `-ERR`, and behave as if AUTH had not been issued: the session stays in AUTHORIZATION and a fresh AUTH logs in. | TestSASLPlainRejections, TestSASLPlainCredentialFailures |
 | POP3-SASL-13 | RFC 5034 §4 | MUST | Reject an initial response sent with a mechanism where the server speaks first. | n/a: the only mechanism, PLAIN, has the client speak first, so an initial response is always valid. |
-| POP3-SASL-14 | RFC 5034 §§4, 7 | SHOULD | Prepare the authorization identity with SASLprep, and fail the authentication if preparation fails or gives an empty string. | n/a: known gap. The engine checks the PLAIN message is UTF-8 (POP3-SASL-05) and passes authzid unchanged to the Backend, which decides whether it may act as that identity; there is no SASLprep in the engine. |
+| POP3-SASL-14 | RFC 5034 §§4, 7 | SHOULD | Prepare the authorization identity with SASLprep, and fail the authentication if preparation fails or gives an empty string. | n/a: by design, credential preparation and authorization policy belong to the Backend. The engine checks PLAIN UTF-8 (POP3-SASL-05) and passes authzid unchanged; the host must implement the RFC 5034 preparation recommendation itself. The engine has no SASLprep tables. |
 | POP3-SASL-15 | RFC 5034 §4 | MUST | When a SASL security layer takes effect, discard earlier client knowledge and apply TLS after the SASL encoding. | n/a: PLAIN negotiates no security layer. |
 | POP3-SASL-16 | RFC 5034 §4 | MUST | Implement PLAIN over TLS. | TestSASLPlainRequiresTLS |
 | POP3-SASL-17 | RFC 5034 §4 | MUST | Offer a configuration that neither announces nor permits a plaintext password mechanism before STLS; it SHOULD be the default. Any TLS config gives this behaviour, with no opt-out. | TestSASLCapability, TestSASLPlainRequiresTLS |
@@ -852,7 +852,7 @@ found **two bugs, now fixed** in `Server.ListenAndServe`: a `POP3TLS` port with
 a nil TLS config was opened in plaintext, against §3.1's immediate handshake
 (POP3-ITLS-05); and a TLS config with no certificate source announced STLS that
 could only fail, against §4 (POP3-ITLS-06). Both now return an error before any
-listener opens. Negative control: with `server.go` from before the fix, both
+listener opens. Negative control: with `pkg/pop3/server/server.go` from before the fix, both
 new tests fail. The pass also added the TLS version and cipher suite to the
 STLS and login logs (POP3-ITLS-11). MSP, operator and MUA duties are listed as n/a rows.
 

@@ -31,7 +31,7 @@ jobs:
       - name: Compare with CPython poplib
         env:
           POP3_REFERENCE_PYTHON: python
-        run: go test -race -count=1 -timeout=90s -run '^TestPythonPoplibReference$' ./internal/referencetest
+        run: go test -race -count=1 -timeout=90s -run '^TestPythonPoplibReference$' ./pkg/pop3/internal/referencetest
 
       - name: Build
         run: go build ./...
@@ -47,10 +47,10 @@ jobs:
           version: v2.11.4
           args: --timeout=5m
 
-      - name: Validate partial RFC checklist
-        run: go run ./internal/checklist internal/rfctest
+      - name: Validate RFC checklist
+        run: go run ./internal/checklist pkg/pop3/rfctest
 
-      # The RFC proofs in internal/rfctest drive the library from outside the
+      # The RFC proofs in pkg/pop3/rfctest drive the library from outside the
       # package, so coverage is counted across every package (-coverpkg). CI
       # fails below 95%; COVERAGE.md lists what is left uncovered and why.
       - name: Run tests with race detector and coverage
@@ -84,11 +84,11 @@ jobs:
       - name: Fuzz each target
         run: |
           set -euo pipefail
-          targets=$(go test -list '^Fuzz' . | grep '^Fuzz')
+          targets=$(go test -list '^Fuzz' ./pkg/pop3/server | grep '^Fuzz')
           test -n "$targets"
           for target in $targets; do
             echo "::group::$target"
-            go test -run='^$' -fuzz="^${target}\$" -fuzztime=100000x -parallel=2 .
+            go test -run='^$' -fuzz="^${target}\$" -fuzztime=100000x -parallel=2 ./pkg/pop3/server
             echo "::endgroup::"
           done
 
@@ -97,5 +97,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-failures
-          path: testdata/fuzz
+          path: pkg/pop3/server/testdata/fuzz
           if-no-files-found: ignore
