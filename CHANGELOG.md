@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-26
+
+### Changed (breaking)
+
+- The root package is gone. The module path remains
+  `github.com/rest-mail/go-pop3`, while the backend-facing API moves to
+  `github.com/rest-mail/go-pop3/pkg/pop3` and the server moves to
+  `github.com/rest-mail/go-pop3/pkg/pop3/server`.
+- `NewServer` becomes `server.New`; `NewSession` keeps its name in package
+  `server`. The protocol and backend method contracts are unchanged.
+- Command parsing, redaction, UID checks and message framing live in
+  `pkg/pop3/internal/wire`. The black-box RFC suite is now
+  `pkg/pop3/rfctest`, and the independent Python client comparison is in
+  `pkg/pop3/internal/referencetest`. These test and helper packages are not
+  consumer APIs.
+
+Migration: replace imports and qualify server names separately from backend types.
+
+| Before (v0.3) | After (v0.4) |
+|---------------|--------------|
+| `import "github.com/rest-mail/go-pop3"` | `"github.com/rest-mail/go-pop3/pkg/pop3"` and/or `"github.com/rest-mail/go-pop3/pkg/pop3/server"` |
+| `pop3.NewServer(backend, tlsConfig, limiter)` | `server.New(backend, tlsConfig, limiter)` |
+| `pop3.Server`, `pop3.Ports`, `pop3.Session`, `pop3.NewSession` | `server.Server`, `server.Ports`, `server.Session`, `server.NewSession` |
+| `pop3.Backend`, `pop3.Mailbox`, `pop3.Message`, `pop3.OctetCount`, `pop3.Limiter`, `pop3.NopLimiter` | Same names, imported from `.../pkg/pop3` |
+| `pop3.LoginDelayBackend`, `pop3.LoginDelayMailbox`, `pop3.ImplementationBackend`, `pop3.UTF8Backend`, `pop3.SASLBackend` | Same names, imported from `.../pkg/pop3` |
+| `pop3.ErrInUse`, `pop3.ErrLoginDelay`, `pop3.ErrSystemTemporary`, `pop3.ErrSystemPermanent`, `pop3.ErrUTF8Required` | Same sentinels, imported from `.../pkg/pop3` |
+
+### Documentation
+
+- Reorganize the README around packages, a compiled quick start, capabilities,
+  library and host responsibilities, and deliberate, unplanned and planned gaps.
+- Backfill the v0.3.0 release notes that were left under Unreleased, preserving
+  their text unchanged.
+
+## [0.3.0] - 2026-10-23
+
 ### Changed
 
 - The RFC checklist is no longer labelled partial: RFC 3206, RFC 4616 and
