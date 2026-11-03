@@ -31,8 +31,15 @@ Retrieve error with partial bytes. The partial bytes must not start a positive
 multiline reply or leak into the following command's response. Empty command
 lines are syntax errors, including while USER is pending; they must receive a
 negative reply and consume that pending USER just like other invalid commands.
-The lock and resource rows explicitly record host integration duties and the
-current API gap; `n/a` does not mean those RFC duties have been fulfilled.
+The lock and resource rows (POP3-LOCK-01/02, POP3-UPDATE-07) prove the release
+boundary the engine gives the host: a lock-holding fixture Backend takes the
+lock and `pop3.MailboxCloser.Close` releases it, exactly once on every exit
+path. Taking a real, exclusive store lock and releasing the host's resources
+inside Close stay host integration duties. Negative controls, each checked
+locally against `pkg/pop3/server/session.go`: dropping the close of a partial
+authentication result fails POP3-LOCK-02's partial cases; dropping the close of
+the Mailbox a login was opening fails its Messages-panic case; closing the
+connection before the Mailbox fails POP3-UPDATE-07.
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -42,9 +49,9 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-PASS-06 | RFC 1939 §§3, 7 (PASS) | Normative | Deliver the server/mailbox-specific password argument unchanged, including case and embedded spaces. | TestCredentialArgumentsPreserved |
 | POP3-AUTH-05 | RFC 1939 §4 | Normative | Enter TRANSACTION with no messages marked deleted, including a fresh session over the same maildrop after an earlier session aborted with deletion marks. | TestFreshSessionDeletionMarks |
 | POP3-RETR-03 | RFC 1939 §5 (RETR) | Normative | An unsuccessful RETR sends negative status rather than a positive multiline message; a later RETR may succeed in the same TRANSACTION. | TestRetrievalFailureRecovery |
-| POP3-LOCK-01 | RFC 1939 §4 | Normative | Acquire exclusive maildrop access as necessary before reporting successful authentication, preventing modification or removal before UPDATE. | n/a: host/backend integration duty; Session does not acquire storage locks and the Backend/Mailbox interfaces expose no lock operation. ErrInUse refusal is tested separately, not proof of actual exclusive ownership. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
-| POP3-LOCK-02 | RFC 1939 §4 | Normative | Release any acquired maildrop lock before rejecting maildrop access. | n/a: host/backend integration duty; no lock release callback exists when Authenticate or Messages fails, so the backend must arrange cleanup itself. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
-| POP3-UPDATE-07 | RFC 1939 §6 | Normative | Release the exclusive-access lock and all maildrop resources, then close the connection after UPDATE. | n/a: Session closes its connection (POP3-UPDATE-03), but Mailbox has no Close or unlock callback; actual storage resource and lock release cannot be asserted by a library wire test. Planned follow-up: [#84](https://github.com/rest-mail/go-pop3/issues/84). |
+| POP3-LOCK-01 | RFC 1939 §4 | Normative | Acquire exclusive maildrop access as necessary before reporting successful authentication, preventing modification or removal before UPDATE. The Backend takes the lock (in Authenticate or Messages); the engine calls Messages before `+OK`, makes no Delete before UPDATE, and holds the Mailbox until the session ends, when MailboxCloser.Close releases it. A second session is refused with IN-USE while the first holds the lock, and signs in once it has left. Whether a real store lock is exclusive is the host's duty. | TestMaildropLockHeldForSession |
+| POP3-LOCK-02 | RFC 1939 §4 | Normative | Release any acquired maildrop lock before rejecting maildrop access. A Mailbox whose Messages failed (SYS/TEMP, SYS/PERM, IN-USE), or that the Backend returned with an error (a partial result: IN-USE, LOGIN-DELAY, SYS, AUTH), is closed exactly once before the `-ERR` is sent and never used; one whose Messages panicked is closed when the session ends. A retry gets a new Mailbox. | TestMaildropLockReleasedBeforeRefusal |
+| POP3-UPDATE-07 | RFC 1939 §6 | Normative | Release the exclusive-access lock and all maildrop resources, then close the connection after UPDATE. After the UPDATE deletions the engine calls MailboxCloser.Close once, and the connection stays open until Close returns. Releasing the host's resources inside Close is the host's duty. | TestUpdateReleasesLockBeforeClose |
 
 ## RFC 1939: selected AUTHORIZATION and USER/PASS behavior
 
@@ -115,10 +122,11 @@ Deletion references below cover LIST, RETR and DELE; selected TOP/UIDL proofs fo
 ## RFC 1939 §6: selected UPDATE/QUIT requirements
 
 These proofs observe wire replies, session termination and per-UID backend calls.
-Successful fixture deletes model persistence; actual storage durability, exclusive
-maildrop ownership, lock acquisition/release and resource cleanup are backend
-integration contracts outside this checked inventory. The Mailbox interface has
-no multi-message transaction or lock-release operation. On deletion failure the
+Successful fixture deletes model persistence; actual storage durability and
+exclusive maildrop ownership are backend integration contracts outside this
+checked inventory. The release point after UPDATE is `pop3.MailboxCloser.Close`
+(POP3-UPDATE-07). The Mailbox interface has no multi-message transaction. On
+deletion failure the
 RFC permits some or none of the marked messages to be removed; these tests prove
 both outcomes without claiming atomicity, rollback or a deletion order.
 AUTHORIZATION QUIT remains covered by POP3-AUTH-04 above.

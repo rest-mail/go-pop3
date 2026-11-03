@@ -311,15 +311,26 @@ type Mailbox interface {
 }
 
 // MailboxCloser is an optional [Mailbox] extension for a Mailbox that holds
-// resources for its session, such as a connection or session with an upstream
-// store. The server calls Close exactly once on every Mailbox the Backend hands
-// it: when the session ends (after QUIT and its UPDATE state, on a client
-// disconnect or idle timeout, when the server shuts down, or after a recovered
-// panic), or straight away when the login is abandoned after Authenticate
-// returned the Mailbox because [Mailbox.Messages] failed. It is never called
-// for a session that did not obtain a Mailbox. The client may already be gone
-// when Close runs; an error is logged and otherwise ignored. A Mailbox without
-// it is used exactly as before.
+// resources for its session, such as an exclusive maildrop lock (RFC 1939 §4)
+// or a connection to an upstream store. The Backend keeps doing the locking;
+// Close is the release boundary.
+//
+// Every non-nil Mailbox the Backend returns passes to the session, and the
+// server calls Close on it exactly once:
+//
+//   - when the session ends: after QUIT and its UPDATE state, on a client
+//     disconnect or idle timeout, when the server shuts down, or after a
+//     recovered panic, including one in [Mailbox.Messages]. Close runs before
+//     the connection closes, so the lock is released first (RFC 1939 §6);
+//   - straight away, before the -ERR reply, when the login does not use it:
+//     [Mailbox.Messages] failed (the lock is released before access is
+//     refused, RFC 1939 §4), or the Backend returned it together with an
+//     error, a partial result that is never used. A later login gets a new
+//     Mailbox, closed in its turn.
+//
+// It is never called for a session that did not obtain a Mailbox. The client
+// may already be gone when Close runs; an error or panic is logged and
+// otherwise ignored. A Mailbox without it is used exactly as before.
 type MailboxCloser interface {
 	Mailbox
 	Close() error
