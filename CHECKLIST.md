@@ -73,7 +73,7 @@ current API gap; `n/a` does not mean those RFC duties have been fulfilled.
 | POP3-CAPA-06 | RFC 2449 §6.1 | Normative | Announce parameterless TOP unchanged in both states; the advertised command is usable only in TRANSACTION. | TestCapaTopContract |
 | POP3-CAPA-07 | RFC 2449 §6.8 | Normative | Announce parameterless UIDL unchanged in both states; the advertised single and multiline commands are usable only in TRANSACTION. | TestCapaUIDLContract |
 | POP3-CAPA-08 | RFC 2449 §6.3 | Normative | If AUTH/SASL is supported, advertise the SASL tag with the supported mechanism list in both states. | TestSASLCapability |
-| POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. | n/a: host retention policy is unavailable through Backend/Mailbox, and EXPIRE is not advertised. This is an integration/API gap; neither indefinite retention nor compliance with the site recommendation is proved. Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
+| POP3-CAPA-09 | RFC 2449 §6.7 | SHOULD | Sites allowing indefinite retention announce EXPIRE NEVER; a finite EXPIRE value describes the guaranteed minimum retention and accounts for per-user policy. An ExpireBackend's Retention is announced in both states as `EXPIRE NEVER` or `EXPIRE <days>`, including `EXPIRE 0`; an ExpireMailbox's value replaces it after login; a negative day count omits the tag, and a Backend without ExpireBackend never announces it. Which policy a site has, and that it is the guaranteed minimum, is host policy. | TestCapaExpire, TestCapaExpireRequiresBackend |
 | POP3-CAPA-10 | RFC 2449 §6.9 | Normative | When IMPLEMENTATION is announced, supply identifying tokens in both states or optionally TRANSACTION only. | TestCapaImplementation, TestCapaImplementationRequiresBackend |
 | POP3-CAPA-11 | RFC 2449 §§3, 5 | Normative | Emit nonempty capability tags and space-separated nonempty VCHAR parameters with complete CRLF/dot framing, including combined LOGIN-DELAY, UTF8, IMPLEMENTATION (both states or TRANSACTION only) and STLS configurations before TLS, after TLS and after login. | TestCapaConfiguredGrammar |
 
@@ -83,10 +83,13 @@ after a verified handshake, and after authentication, including parameter change
 TOP/UIDL capability proofs also execute their advertised commands and check their
 state restrictions. An `ImplementationBackend` announces IMPLEMENTATION in
 both states or after login only, and text outside the §9 param grammar or the
-512-octet line limit omits the tag (POP3-CAPA-10). The n/a entries distinguish
-unsupported optional features,
-unavailable host retention policy, and duties belonging to clients; they are not
-proofs of those features or host/client conformance.
+512-octet line limit omits the tag (POP3-CAPA-10). An `ExpireBackend` announces
+EXPIRE in both states, with `USER` before login when retention varies per
+account and the account's own value after it (POP3-CAPA-09, POP3-EXPIRE-01).
+Negative control: with `expireTag` in `pkg/pop3/server/session.go` never
+appending `USER`, TestCapaExpire fails its per-user cases.
+The n/a entries distinguish unsupported optional features and duties belonging
+to clients; they are not proofs of those features or host/client conformance.
 
 ## RFC 1939 §5: selected TRANSACTION requirements
 
@@ -706,7 +709,8 @@ PIPELINING processing in turn (POP3-PIPELINING-02 to 07), and §8 response codes
 (POP3-RESP-CODES-*). The §3 grammar's APOP timestamp ("MUST conform to RFC-822
 msg-id") is POP3-APOP-02. The rows below are what the pass found missing. No
 new wire test was needed: the two mapped rows are asserted by existing tests,
-which now name them.
+which now name them. POP3-EXPIRE-01 and POP3-EXPIRE-02 have since been met
+([#85](https://github.com/rest-mail/go-pop3/issues/85)).
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
@@ -717,8 +721,8 @@ which now name them.
 | POP3-LENGTH-03 | RFC 2449 §4; RFC 5034 §4 | MUST | Support the largest command length that any supported capability specifies. Re-checked against RFC 5034 §4 on 2026-10-22: AUTH with an initial response keeps the 255-octet command limit (POP3-LENGTH-01), but a response line after the `+ ` challenge may be as long as the mechanism needs, so the largest PLAIN response (1026 octets with CRLF) is accepted. | TestCommandLength255Credentials, TestRFC5034LargestPlainResponse |
 | POP3-CAPA-13 | RFC 2449 §5 | MUST | A capability description documents the states it is announced in, where its commands are valid, and whether its argument can change after login. | n/a: duty on capability specifications, not on servers. |
 | POP3-CAPA-14 | RFC 2449 §5 | SHOULD | A capability tag for a command is identical to the command keyword. | n/a: duty on capability specifications. The tags this library announces (TOP, UIDL, USER, STLS, UTF8) already match their keywords. |
-| POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. | n/a: EXPIRE is not announced (POP3-CAPA-09). Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
-| POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 clients MAY assume an implicit DELE for each downloaded message. | n/a: host retention policy has no Backend API, and EXPIRE is not announced (POP3-CAPA-09). Planned follow-up: [#85](https://github.com/rest-mail/go-pop3/issues/85). |
+| POP3-EXPIRE-01 | RFC 2449 §6.7 | MUST | When EXPIRE varies per user, announce in AUTHORIZATION the smallest value that could apply, append `USER`, and announce the user's own value in TRANSACTION. With perUser, AUTHORIZATION (before and after a failed login) announces the Backend's value followed by `USER`; TRANSACTION announces the ExpireMailbox's value, or the Backend's, without `USER`. `EXPIRE NEVER` never carries `USER`, since a NEVER minimum leaves no account with a shorter period. Computing the smallest value is the Backend's duty; the engine announces it unchanged. | TestCapaExpire |
+| POP3-EXPIRE-02 | RFC 2449 §6.7 | SHOULD | A site with an automatic deletion policy announces it with EXPIRE; with EXPIRE 0 the server MAY assume an implicit DELE for each message downloaded with RETR. An ExpireBackend announces its policy (POP3-CAPA-09). Deletion stays with the host: under `EXPIRE 0` the engine deletes only messages the client DELEted, and the host sees each RETR through MarkSeen to apply the implicit DELE itself. | TestCapaExpire, TestCapaExpireZeroLeavesDeletionToHost |
 | POP3-CLIENT-01 | RFC 2449 §§5, 6.5, 6.6, 6.9, 7, 8 | MUST | Client duties: reissue CAPA after an integrity layer, use LOGIN-DELAY for check intervals, track pipelined commands and stay within the TCP window, never change behavior on IMPLEMENTATION, never require an extension for basic function, and ignore unknown response-code detail. | n/a: client duties. This library is a server only. |
 | POP3-IANA-01 | RFC 2449 §9 | MUST | New capabilities and response codes are defined in an RFC with the listed details; new capability names never begin with `X`. | n/a: registration duty. The library announces only registered capabilities and codes (exact lists in POP3-CAPA-11 and POP3-RESP-CODES-*). |
 

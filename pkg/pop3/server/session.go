@@ -257,6 +257,9 @@ func (s *Session) handleCapa() {
 	if tag, ok := s.loginDelayTag(); ok {
 		s.sendLine("%s", tag)
 	}
+	if tag, ok := s.expireTag(); ok {
+		s.sendLine("%s", tag)
+	}
 	if tag, ok := s.implementationTag(); ok {
 		s.sendLine("%s", tag)
 	}
@@ -286,6 +289,36 @@ func (s *Session) loginDelayTag() (string, bool) {
 		return "", false
 	}
 	tag := "LOGIN-DELAY " + strconv.Itoa(seconds)
+	if perUser {
+		tag += " USER"
+	}
+	return tag, true
+}
+
+// expireTag builds the EXPIRE capability line (RFC 2449 §6.7) for the current
+// state. AUTHORIZATION announces the Backend's minimum, followed by USER when
+// the policy varies per account; TRANSACTION announces the account's own value
+// when the Mailbox reports one. NEVER is never followed by USER, and a negative
+// day count omits the tag.
+func (s *Session) expireTag() (string, bool) {
+	b, ok := s.backend.(pop3.ExpireBackend)
+	if !ok {
+		return "", false
+	}
+	r, perUser := b.Expire()
+	if s.mailbox != nil {
+		perUser = false
+		if m, ok := s.mailbox.(pop3.ExpireMailbox); ok {
+			r = m.Expire()
+		}
+	}
+	if r.Never {
+		return "EXPIRE NEVER", true
+	}
+	if r.Days < 0 {
+		return "", false
+	}
+	tag := "EXPIRE " + strconv.Itoa(r.Days)
 	if perUser {
 		tag += " USER"
 	}
