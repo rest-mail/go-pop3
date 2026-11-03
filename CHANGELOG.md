@@ -14,8 +14,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   client disconnect, idle timeout, server shutdown or a recovered panic, and
   straight away when a login is abandoned because `Messages` failed. A
   Mailbox without it is used as before.
+- `pop3.ConnectionAuthBackend`, an optional `Backend` extension with
+  `AuthenticateConnection(pop3.AuthRequest) (pop3.Mailbox, error)` (#87). When
+  a Backend implements it, it replaces `Authenticate`, `AuthenticateUTF8` and
+  `AuthenticatePlain` for every USER/PASS and AUTH PLAIN login. The request
+  carries the mechanism (`pop3.MechanismUser` or `pop3.MechanismPlain`), the
+  credentials, the UTF-8 mode and a `pop3.ConnectionSecurity` value: whether
+  TLS is active, whether it began on the implicit-TLS listener or with STLS,
+  and the negotiated `tls.ConnectionState`. A Backend can now require TLS for
+  some accounts and allow plaintext for others (RFC 2595 §2.3, POP3-STLS-14).
+  A policy refusal is an ordinary error: `-ERR [AUTH]`, counted by the
+  Limiter. The TLS config still refuses every clear-text login for the whole
+  server first. Additive: a Backend without it is called as before.
 
 ### Fixed
+
+- In UTF-8 mode (after the client's UTF8 command) USER and PASS arguments that
+  are not well-formed UTF-8 reached the Backend (#86). They are now refused
+  before authentication with `-ERR Username is not valid UTF-8` or
+  `-ERR Password is not valid UTF-8`, as RFC 6856 §2.2 requires, without a
+  Limiter failure since no credential was checked; a refused PASS consumes the
+  USER as any failed PASS does. Outside UTF-8 mode credentials still pass byte
+  for byte, so legacy 8-bit credentials keep working. No SASLprep is applied:
+  CAPA does not announce `UTF8 USER`. AUTH PLAIN already rejected non-UTF-8.
+  Checked by POP3-UTF8-08; the README badge reads "RFC checklist: 158/205
+  mapped".
 
 - A session opened before its address was banned could still sign in (#90):
   the ban was read only after a failed attempt. USER, PASS and AUTH (before

@@ -48,6 +48,7 @@ type Session struct {
 
 	// Session state
 	usingTLS bool
+	stls     bool // TLS began with STLS rather than on the implicit-TLS listener
 	utf8     bool // client issued UTF8 (RFC 6856); reset by STLS
 	auth     *authState
 	mailbox  pop3.Mailbox
@@ -371,6 +372,7 @@ func (s *Session) handleSTLS() bool {
 	s.reader = bufio.NewReaderSize(tlsConn, maxCommandLine)
 	s.writer = bufio.NewWriter(tlsConn)
 	s.usingTLS = true
+	s.stls = true
 	// Like the capability list (RFC 2595 §4), a mode the client chose before
 	// TLS is not trusted afterwards: it must issue UTF8 again.
 	s.utf8 = false
@@ -395,6 +397,10 @@ func (s *Session) handleUser(arg string) bool {
 	}
 	if arg == "" {
 		s.err("Username required")
+		return false
+	}
+	if !s.validCredential(arg) {
+		s.err("Username is not valid UTF-8")
 		return false
 	}
 	s.auth.username = arg
@@ -424,16 +430,58 @@ func (s *Session) handlePass(arg string) bool {
 		s.err("Password required")
 		return false
 	}
-
-	var mailbox pop3.Mailbox
-	var err error
-	if b, ok := s.backend.(pop3.UTF8Backend); ok {
-		mailbox, err = b.AuthenticateUTF8(username, arg, s.utf8)
-	} else {
-		mailbox, err = s.backend.Authenticate(username, arg)
+	if !s.validCredential(arg) {
+		s.err("Password is not valid UTF-8")
+		return false
 	}
+
+	mailbox, err := s.authenticate(pop3.AuthRequest{Mechanism: pop3.MechanismUser, User: username, Pass: arg})
 	s.login(username, mailbox, err)
 	return false
+}
+
+// validCredential reports whether a USER or PASS argument may reach the
+// Backend. In UTF-8 mode RFC 6856 §2.2 requires refusing a user name or
+// password that is not well-formed UTF-8 (RFC 3629), so it is refused here,
+// before authentication, without counting against the [pop3.Limiter]: no
+// credential was checked. Outside UTF-8 mode the arguments are legacy octets
+// (RFC 1939 has no charset), and validating them would lock out existing 8-bit
+// credentials, so they pass unchanged. The UTF8 capability does not carry the
+// USER argument, so no SASLprep is applied in either mode (POP3-UTF8-07).
+func (s *Session) validCredential(arg string) bool {
+	return !s.utf8 || utf8.ValidString(arg)
+}
+
+// authenticate hands one login attempt to the Backend: to
+// [pop3.ConnectionAuthBackend.AuthenticateConnection] with the connection's
+// security when the Backend has it, otherwise to the method for the mechanism.
+func (s *Session) authenticate(req pop3.AuthRequest) (pop3.Mailbox, error) {
+	if b, ok := s.backend.(pop3.ConnectionAuthBackend); ok {
+		req.UTF8 = s.utf8
+		req.Security = s.security()
+		return b.AuthenticateConnection(req)
+	}
+	if req.Mechanism == pop3.MechanismPlain {
+		return s.backend.(pop3.SASLBackend).AuthenticatePlain(req.Authzid, req.User, req.Pass, s.utf8)
+	}
+	if b, ok := s.backend.(pop3.UTF8Backend); ok {
+		return b.AuthenticateUTF8(req.User, req.Pass, s.utf8)
+	}
+	return s.backend.Authenticate(req.User, req.Pass)
+}
+
+// security describes the session's connection for a
+// [pop3.ConnectionAuthBackend]. TLS follows usingTLS, the same flag that
+// enforces the TLS config, so the Backend and the engine always agree.
+func (s *Session) security() pop3.ConnectionSecurity {
+	if !s.usingTLS {
+		return pop3.ConnectionSecurity{}
+	}
+	sec := pop3.ConnectionSecurity{TLS: true, ImplicitTLS: !s.stls}
+	if c, ok := s.conn.(*tls.Conn); ok {
+		sec.State = c.ConnectionState()
+	}
+	return sec
 }
 
 // refuseBanned ends an authentication attempt from a banned address before
@@ -485,8 +533,7 @@ func (s *Session) saslOffered() bool {
 // whether the session must end because the address is banned or the response
 // line could not be read.
 func (s *Session) handleAuth(arg string) bool {
-	b, ok := s.backend.(pop3.SASLBackend)
-	if !ok {
+	if _, ok := s.backend.(pop3.SASLBackend); !ok {
 		s.err("Unknown command")
 		return false
 	}
@@ -552,7 +599,7 @@ func (s *Session) handleAuth(arg string) bool {
 		s.err("Invalid PLAIN response")
 		return false
 	}
-	mailbox, err := b.AuthenticatePlain(fields[0], fields[1], fields[2], s.utf8)
+	mailbox, err := s.authenticate(pop3.AuthRequest{Mechanism: pop3.MechanismPlain, Authzid: fields[0], User: fields[1], Pass: fields[2]})
 	s.login(fields[1], mailbox, err)
 	return false
 }
