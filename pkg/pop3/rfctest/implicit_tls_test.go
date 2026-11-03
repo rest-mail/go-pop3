@@ -23,6 +23,12 @@ import (
 func implicitTLSServer(t *testing.T, config *tls.Config) (string, *stlsBackend) {
 	t.Helper()
 	b := &stlsBackend{backend: backend{password: "secret"}}
+	return implicitTLSServe(t, config, b), b
+}
+
+// implicitTLSServe is implicitTLSServer for any Backend.
+func implicitTLSServe(t *testing.T, config *tls.Config, b pop3.Backend) string {
+	t.Helper()
 	srv := pop3server.New(b, config, pop3.NopLimiter{})
 	for attempt := 0; ; attempt++ {
 		probe, err := net.Listen("tcp", "127.0.0.1:0")
@@ -45,7 +51,7 @@ func implicitTLSServer(t *testing.T, config *tls.Config) (string, *stlsBackend) 
 				t.Errorf("implicit-TLS server did not stop: %v", err)
 			}
 		})
-		return net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), b
+		return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	}
 }
 

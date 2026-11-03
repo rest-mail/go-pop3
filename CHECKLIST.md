@@ -639,8 +639,8 @@ certificate. The n/a rows marked "known gap" are unmet duties, not met ones.
 | POP3-UTF8-04 | RFC 6856 §2.1; RFC 2595 §4 | MAY | Clients must not issue STLS after UTF8 and servers MAY refuse it. This library accepts STLS but discards UTF-8 mode with it: the login after TLS reports utf8=false unless the client issues UTF8 again over TLS. | TestUTF8ModeResetByTLS |
 | POP3-UTF8-05 | RFC 6856 §§2.1, 4 | MUST | Outside UTF-8 mode, never send non-ASCII strings as is: send a surrogate message or fail the RETR/TOP with `-ERR`. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve; the engine reports the mode to AuthenticateUTF8 (POP3-UTF8-03) so the backend can choose the form. |
 | POP3-UTF8-06 | RFC 6856 §2.1 | SHOULD | The LIST size of a message matches the octets RETR sends, not counting byte-stuffing. | n/a: host duty. LIST reports the Message.Size the Mailbox supplies for the form it will serve. |
-| POP3-UTF8-07 | RFC 6856 §2.2 | SHOULD | A server announcing `UTF8 USER` applies SASLprep to USER/PASS arguments and rejects prohibited characters. | n/a: the USER argument is not announced (POP3-UTF8-01), so this conditional duty does not apply. |
-| POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). | n/a: known gap. USER/PASS arguments reach the Backend unchecked. Rejecting them in the engine would also refuse 8-bit legacy credentials, which is an owner decision. AUTH PLAIN already rejects non-UTF-8 (POP3-SASL-05). Planned follow-up: [#86](https://github.com/rest-mail/go-pop3/issues/86). |
+| POP3-UTF8-07 | RFC 6856 §2.2 | SHOULD | A server announcing `UTF8 USER` applies SASLprep to USER/PASS arguments and rejects prohibited characters. | n/a: the USER argument is not announced (POP3-UTF8-01), so this conditional duty does not apply. Well-formed UTF-8 credentials reach the Backend unprepared (POP3-UTF8-08). |
+| POP3-UTF8-08 | RFC 6856 §2.2 | MUST | Reject UTF-8 usernames or passwords that are not well-formed UTF-8 (RFC 3629). In UTF-8 mode, USER or PASS with malformed UTF-8 (invalid bytes, truncated, overlong or surrogate forms) gets `-ERR Username is not valid UTF-8` or `-ERR Password is not valid UTF-8` with no Backend call and no Limiter failure; a refused PASS consumes the USER. Outside UTF-8 mode (UTF8 not issued, or discarded by STLS) the arguments are legacy octets and reach the Backend byte for byte. AUTH PLAIN always rejects non-UTF-8 (POP3-SASL-05). | TestUTF8CredentialValidation |
 | POP3-UTF8-09 | RFC 6856 §3 | Normative | The optional LANG capability and command select the language of human-readable response text. | n/a: LANG is not implemented or announced; the command is unknown (POP3-COMMAND-01). |
 | POP3-UTF8-10 | RFC 6856 §5 | Normative | A LIST/TOP/RETR refused because the message needs UTF-8 mode carries the `[UTF8]` response code. A Retrieve returning ErrUTF8Required (direct or wrapped) makes RETR and TOP reply `-ERR [UTF8]` and mark nothing seen, when the Backend announces UTF8 and the session is not in UTF-8 mode; otherwise, and for other errors, the reply stays plain. LIST is never refused. | TestUTF8ResponseCode |
 | POP3-APOP-01 | RFC 1939 §7 (APOP); RFC 6856 §2.2 | Normative | The optional APOP command authenticates with an MD5 digest of the greeting timestamp and a shared secret; with UTF-8 credentials the digest uses SASLprep. | n/a: APOP is not implemented and the greeting carries no timestamp; APOP gets `-ERR` in both states (POP3-COMMAND-02). |
@@ -650,6 +650,8 @@ Negative control: with the `s.utf8 = false` reset after STLS removed from
 utf8=true.
 With `retrieveFailed` in `pkg/pop3/server/session.go` always sending the plain reply,
 TestUTF8ResponseCode fails its direct and wrapped cases.
+With `validCredential` in `pkg/pop3/server/session.go` always returning true,
+TestUTF8CredentialValidation fails every malformed USER and PASS case.
 
 Every RFC this library implements (1939, 2449, 2595, 3206, 4616, 5034, 6856
 and 8314) has had a line-by-line pass; the dated audit records follow.
@@ -739,7 +741,7 @@ was found in RFC 2595 itself.
 | POP3-STLS-11 | RFC 2595 §2.2 | SHOULD | Offer a privacy mode that refuses authentication until encryption is active: with a TLS config, USER and AUTH PLAIN are refused before STLS with no Backend call, and succeed after it. TLS cannot be turned off once started, so the "terminate if deactivated" case cannot arise. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
 | POP3-STLS-12 | RFC 2595 §2.2 | SHOULD | Offer a backward-compatible mode needing only the base protocol's mechanisms: with no TLS config, plaintext USER/PASS logs in. | TestAuthorizationUserPass |
 | POP3-STLS-13 | RFC 2595 §2.3 | MUST | Be configurable to refuse every clear-text login command and mechanism unless encryption is active: a TLS config refuses USER (so PASS has nothing to complete) and AUTH PLAIN with or without an initial response. APOP is not implemented. | TestSTLSCredentials, TestSASLPlainRequiresTLS |
-| POP3-STLS-14 | RFC 2595 §2.3 | SHOULD | A server that allows clear-text logins can refuse them for the whole server and per user. | n/a: known gap. The whole-server switch is the TLS config (POP3-STLS-13). Per user needs the Backend to know whether the session is encrypted, which `Authenticate` is not told; adding that is an API decision for the owner. Planned follow-up: [#87](https://github.com/rest-mail/go-pop3/issues/87). |
+| POP3-STLS-14 | RFC 2595 §2.3 | SHOULD | A server that allows clear-text logins can refuse them for the whole server and per user. The whole-server switch is the TLS config (POP3-STLS-13). Per user, a ConnectionAuthBackend receives every USER/PASS and AUTH PLAIN login with its connection security (no TLS, STLS, or implicit TLS, and the negotiated state) instead of the older Authenticate methods; refusing a plaintext login is an ordinary error, answered `[AUTH]` and counted by the Limiter. | TestConnectionSecurityReachesBackend |
 | POP3-STLS-15 | RFC 2595 §2.5 | MUST | The server checks the TLS negotiation result: a failed negotiation closes without authenticating. Which versions, suites and client certificates are acceptable is host policy in the `tls.Config`. | TestSTLSHandshakeFailure |
 | POP3-STLS-16 | RFC 2595 §4 | MUST | A server with STLS also implements the RFC 2449 extension mechanism, so STLS is announced through CAPA in AUTHORIZATION. | TestCapaBothStates, TestSTLSCredentials |
 | POP3-STLS-17 | RFC 2595 §4 | MAY | AUTH EXTERNAL authenticates with TLS client credentials. | n/a: EXTERNAL is not implemented and RFC 2595 does not require it; a client certificate grants nothing on its own (POP3-STLS-08). |
@@ -788,13 +790,13 @@ mode (POP3-UTF8-05), LIST sizes (POP3-UTF8-06), §2.2 SASLprep and RFC 3629
 checks (POP3-UTF8-07/08), §3 LANG (POP3-UTF8-09), §§4–5 the `[UTF8]` code
 (POP3-UTF8-10) and APOP (POP3-APOP-01). UTF-8 in AUTH is governed by RFC 5034
 (POP3-SASL-05). No code bug was found; POP3-UTF8-08 and POP3-UTF8-10 stay
-known gaps.
+known gaps. POP3-UTF8-08 has since been met ([#86](https://github.com/rest-mail/go-pop3/issues/86)).
 
 | ID | Section | Level | Requirement | Tests |
 |----|---------|-------|-------------|-------|
 | POP3-UTF8-11 | RFC 6856 §2.1 | MAY | The server may answer the UTF8 command with `-ERR`: without a UTF8Backend it does, in both states, and UTF8 mode stays off. | TestUTF8CommandStates |
 | POP3-UTF8-12 | RFC 6856 §2.1 | SHOULD | In UTF-8 mode, convert a maildrop stored in another charset to UTF-8 before sending it; binary content-transfer-encoding stays forbidden. | n/a: host duty. Message bytes come unchanged from Mailbox.Retrieve, and the Backend knows the mode (POP3-UTF8-03). |
-| POP3-UTF8-13 | RFC 6856 §§2.1, 2.2 | MUST | Client duties: no STLS after UTF8, and no UTF-8 credentials unless the UTF8 capability has the USER argument. | n/a: client duties. The server side of STLS after UTF8 is POP3-UTF8-04. |
+| POP3-UTF8-13 | RFC 6856 §§2.1, 2.2 | MUST | Client duties: no STLS after UTF8, and no UTF-8 credentials unless the UTF8 capability has the USER argument. | n/a: client duties. The server side of STLS after UTF8 is POP3-UTF8-04. A client that sends UTF-8 credentials anyway is not refused: in UTF-8 mode they must be well-formed (POP3-UTF8-08) and then reach the Backend unchanged. |
 
 ## RFC 3206: line-by-line audit additions
 

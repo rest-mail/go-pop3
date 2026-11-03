@@ -47,6 +47,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 	sasl := read("pkg/pop3/rfctest/sasl_test.go")
 	coreStates := read("pkg/pop3/rfctest/core_states_test.go")
 	utf8 := read("pkg/pop3/rfctest/utf8_test.go")
+	credentialSecurity := read("pkg/pop3/rfctest/credential_security_test.go")
 	rfc1939Audit := read("pkg/pop3/rfctest/rfc1939_audit_test.go")
 	rfc5034Audit := read("pkg/pop3/rfctest/rfc5034_audit_test.go")
 	rfc3206Audit := read("pkg/pop3/rfctest/rfc3206_audit_test.go")
@@ -88,6 +89,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 				filepath.Join(dir, "backend_system_test.go"):      backendSystem,
 				filepath.Join(dir, "sasl_test.go"):                sasl,
 				filepath.Join(dir, "utf8_test.go"):                utf8,
+				filepath.Join(dir, "credential_security_test.go"): credentialSecurity,
 				filepath.Join(dir, "rfc1939_audit_test.go"):       rfc1939Audit,
 				filepath.Join(dir, "rfc5034_audit_test.go"):       rfc5034Audit,
 				filepath.Join(dir, "rfc3206_audit_test.go"):       rfc3206Audit,
@@ -123,7 +125,7 @@ func TestPOP3ChecklistMutations(t *testing.T) {
 			var out bytes.Buffer
 			code := run([]string{"-file", file, dir}, &out, &out)
 			if tc.want == "" {
-				if code != 0 || !strings.Contains(out.String(), "205 items (156 mapped to tests, 49 not applicable), 100 tests") {
+				if code != 0 || !strings.Contains(out.String(), "205 items (158 mapped to tests, 47 not applicable), 102 tests") {
 					t.Fatalf("valid checklist: exit %d\n%s", code, &out)
 				}
 				return

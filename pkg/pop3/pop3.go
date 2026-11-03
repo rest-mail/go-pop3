@@ -1,6 +1,8 @@
 package pop3
 
 import (
+	"crypto/tls"
+
 	"github.com/rest-mail/go-pop3/pkg/pop3/internal/wire"
 )
 
@@ -134,6 +136,13 @@ type UTF8Backend interface {
 	// returned Mailbox must downgrade them (RFC 6857), and [Message.Size] must
 	// count the downgraded bytes that Retrieve returns. A message with no
 	// downgraded form is refused with [ErrUTF8Required] instead.
+	//
+	// When utf8 is true, user and pass are well-formed UTF-8 (RFC 3629): the
+	// engine refuses a USER or PASS argument that is not, before any call
+	// (RFC 6856 §2.2). They are not SASLprep-prepared, since CAPA does not
+	// announce the UTF8 USER argument. When utf8 is false they are passed as
+	// the client sent them, byte for byte, so legacy 8-bit credentials keep
+	// working.
 	AuthenticateUTF8(user, pass string, utf8 bool) (Mailbox, error)
 }
 
@@ -152,6 +161,80 @@ type SASLBackend interface {
 	// against the [Limiter]. utf8 is as for [UTF8Backend.AuthenticateUTF8], and
 	// always false unless the Backend is also a UTF8Backend.
 	AuthenticatePlain(authzid, authcid, pass string, utf8 bool) (Mailbox, error)
+}
+
+// Mechanism values name the login command in [AuthRequest.Mechanism].
+const (
+	// MechanismUser is a USER/PASS login (RFC 1939 §7).
+	MechanismUser = "USER"
+	// MechanismPlain is an AUTH PLAIN login (RFC 5034, RFC 4616).
+	MechanismPlain = "PLAIN"
+)
+
+// ConnectionSecurity describes how the connection a login arrives on is
+// protected. The engine builds a fresh value for every attempt and passes it by
+// value, so nothing a Backend does with it changes the session.
+type ConnectionSecurity struct {
+	// TLS reports that TLS protects the session: the connection was accepted
+	// on the implicit-TLS listener (RFC 8314 §3.1) or the client completed STLS
+	// (RFC 2595 §4) before this login.
+	TLS bool
+	// ImplicitTLS reports that TLS began before the greeting, on the
+	// implicit-TLS listener. It is false after STLS and on a plaintext session.
+	ImplicitTLS bool
+	// State is the negotiated TLS state (version, cipher suite, peer
+	// certificates). It is the zero value when TLS is false. Its slices are
+	// shared with the connection and must be treated as read-only.
+	State tls.ConnectionState
+}
+
+// AuthRequest is one login attempt as the engine hands it to a
+// [ConnectionAuthBackend].
+type AuthRequest struct {
+	// Mechanism is [MechanismUser] for USER/PASS or [MechanismPlain] for
+	// AUTH PLAIN.
+	Mechanism string
+	// Authzid is the SASL PLAIN authorization identity, empty when the client
+	// names none and always empty for USER/PASS. A Backend that does not
+	// support acting as another user rejects a non-empty Authzid that differs
+	// from User.
+	Authzid string
+	// User is the USER argument or the SASL PLAIN authentication identity.
+	User string
+	// Pass is the PASS argument or the SASL PLAIN password.
+	Pass string
+	// UTF8 is as for [UTF8Backend.AuthenticateUTF8]: whether the client issued
+	// UTF8 before logging in. It is always false unless the Backend is also a
+	// [UTF8Backend].
+	UTF8 bool
+	// Security describes the connection the attempt arrived on.
+	Security ConnectionSecurity
+}
+
+// ConnectionAuthBackend is an optional [Backend] extension for a Backend whose
+// login policy depends on how the connection is protected, for example one
+// that lets some accounts log in over plaintext but requires TLS for others
+// (RFC 2595 §2.3: a server SHOULD be able to refuse clear-text logins per
+// user). When the Backend implements it, AuthenticateConnection replaces
+// [Backend.Authenticate], [UTF8Backend.AuthenticateUTF8] and
+// [SASLBackend.AuthenticatePlain] for every USER/PASS and AUTH PLAIN login; a
+// Backend without it is called exactly as before.
+//
+// It changes no other gate. A TLS config still refuses every clear-text login
+// for the whole server until TLS is active (USER and AUTH get "-ERR TLS
+// required" and no request is made), AUTH PLAIN is still offered only by a
+// [SASLBackend], and UTF8 only by a [UTF8Backend].
+type ConnectionAuthBackend interface {
+	Backend
+	// AuthenticateConnection validates req. Errors mean what they mean for
+	// [Backend.Authenticate]. To refuse a login for policy, such as an account
+	// that requires TLS on a plaintext connection, return an ordinary error:
+	// the client sees "-ERR [AUTH] Authentication failed", the same reply as
+	// for a wrong password, and the attempt counts as an authentication
+	// failure against the [Limiter], so a client that keeps trying in the
+	// clear is eventually banned. Refuse before checking the password, so the
+	// reply does not tell a plaintext client whether its password was right.
+	AuthenticateConnection(req AuthRequest) (Mailbox, error)
 }
 
 // Mailbox is a single authenticated POP3 maildrop. Every method is scoped to the

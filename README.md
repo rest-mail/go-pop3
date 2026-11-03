@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![RFC checklist: 156/205 mapped](https://img.shields.io/badge/RFC%20checklist-156%2F205%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 158/205 mapped](https://img.shields.io/badge/RFC%20checklist-158%2F205%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3/pkg/pop3/server)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -37,7 +37,7 @@ The module declares go 1.25.
 
 | Import path | What it holds |
 |-------------|---------------|
-| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `LoginDelayBackend`, `LoginDelayMailbox`, `MailboxCloser` and `ImplementationBackend` interfaces, and the `Err*` sentinels. |
+| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `ConnectionAuthBackend`, `LoginDelayBackend`, `LoginDelayMailbox`, `MailboxCloser` and `ImplementationBackend` interfaces, and the `Err*` sentinels. |
 | `github.com/rest-mail/go-pop3/pkg/pop3/server` | The server: `Server`, `New`, `Ports`, `Session` and `NewSession`. |
 | `pkg/pop3/internal/wire` | Command parsing, log redaction, UID validation, CRLF canonicalization and RETR/TOP framing. Internal: not importable by consumers. |
 | `pkg/pop3/rfctest` | The black-box RFC wire suite, driving only the public API. Tests only. |
@@ -110,7 +110,8 @@ implement. A plain `Backend` keeps USER/PASS and the base capabilities.
 | Interface | Methods | What it enables |
 |-----------|---------|-----------------|
 | `pop3.SASLBackend` | `AuthenticatePlain(authzid, authcid, pass string, utf8 bool) (pop3.Mailbox, error)` | AUTH PLAIN, with an initial response or an empty `+ ` challenge; CAPA lists `SASL PLAIN` while it is accepted. |
-| `pop3.UTF8Backend` | `AuthenticateUTF8(user, pass string, utf8 bool) (pop3.Mailbox, error)` | CAPA `UTF8` and the UTF8 command before login. Replaces `Authenticate` for USER/PASS; the mode tells the backend which message form to serve. |
+| `pop3.UTF8Backend` | `AuthenticateUTF8(user, pass string, utf8 bool) (pop3.Mailbox, error)` | CAPA `UTF8` and the UTF8 command before login. Replaces `Authenticate` for USER/PASS; the mode tells the backend which message form to serve. In UTF-8 mode, a USER or PASS argument that is not well-formed UTF-8 is refused before the backend sees it; outside it, credentials pass byte for byte. |
+| `pop3.ConnectionAuthBackend` | `AuthenticateConnection(req pop3.AuthRequest) (pop3.Mailbox, error)` | Per-account TLS policy. Replaces `Authenticate`, `AuthenticateUTF8` and `AuthenticatePlain` for every login; `req.Security` says whether TLS is active, whether it was implicit or STLS, and the negotiated `tls.ConnectionState`. Refuse a plaintext login with an ordinary error: `[AUTH]`, counted by the `Limiter`. |
 | `pop3.LoginDelayBackend` | `LoginDelay() (seconds int, perUser bool)` | CAPA `LOGIN-DELAY`; `USER` is appended before login when delay varies by account. A negative delay omits the tag. |
 | `pop3.LoginDelayMailbox` | `LoginDelay() int` | The authenticated account's delay after login, without `USER`. Requires a `LoginDelayBackend`; otherwise the tag is absent. |
 | `pop3.MailboxCloser` | `Close() error` | Called exactly once on every Mailbox the backend returned: when the session ends (QUIT after UPDATE, disconnect, idle timeout, server shutdown, recovered panic), or at once when the login is abandoned because `Messages` failed. Release per-session resources here. |
@@ -161,7 +162,9 @@ connections immediately, following the `net/http.Server` lifecycle split.
 The library requires a fresh USER immediately before each PASS, opens the
 maildrop before entering TRANSACTION, and permits retry after failure. With a
 TLS config it refuses cleartext USER and AUTH PLAIN until STLS. With no config,
-plaintext authentication is available for local development. The implicit-TLS
+plaintext authentication is available for local development. Between the two,
+a `ConnectionAuthBackend` sees each login's connection security and can require
+TLS for some accounts only. The implicit-TLS
 port requires a config; `ListenAndServe` also refuses a config without a
 certificate source before opening listeners. STLS discards buffered plaintext,
 clears authentication preparation and UTF8 mode, and is refused after login.
@@ -291,8 +294,6 @@ client tests sit separately from this scoped wire suite.
 |-----|-------|
 | Reliably release maildrop locks and resources on every session exit and failed opening. | [#84](https://github.com/rest-mail/go-pop3/issues/84) |
 | Announce host retention policy with EXPIRE. | [#85](https://github.com/rest-mail/go-pop3/issues/85) |
-| Define and enforce UTF-8 credential validation while preserving legacy credential bytes outside that contract. | [#86](https://github.com/rest-mail/go-pop3/issues/86) |
-| Give authentication backends connection security information for per-account TLS policy. | [#87](https://github.com/rest-mail/go-pop3/issues/87) |
 
 These decisions do not turn unmet checklist rows into conformance claims.
 
