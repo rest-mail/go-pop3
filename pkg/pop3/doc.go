@@ -11,7 +11,8 @@
 // Retrieve; [OctetCount] computes that count.
 //
 // Optional interfaces turn on SASL PLAIN ([SASLBackend]), UTF8 ([UTF8Backend]),
-// LOGIN-DELAY ([LoginDelayBackend] and [LoginDelayMailbox]) and the informational
-// IMPLEMENTATION capability ([ImplementationBackend]). A backend implementing
+// LOGIN-DELAY ([LoginDelayBackend] and [LoginDelayMailbox]), EXPIRE
+// ([ExpireBackend] and [ExpireMailbox]) and the informational IMPLEMENTATION
+// capability ([ImplementationBackend]). A backend implementing
 // only Backend keeps the base USER/PASS behavior.
 package pop3

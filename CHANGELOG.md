@@ -26,6 +26,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   A policy refusal is an ordinary error: `-ERR [AUTH]`, counted by the
   Limiter. The TLS config still refuses every clear-text login for the whole
   server first. Additive: a Backend without it is called as before.
+- `pop3.ExpireBackend` and `pop3.ExpireMailbox`, optional extensions that
+  announce the RFC 2449 §6.7 EXPIRE capability (#85). `Expire()` returns a
+  `pop3.Retention`: `Retention{Never: true}` is announced as `EXPIRE NEVER`
+  and `Retention{Days: n}` as `EXPIRE n`, including `EXPIRE 0` for a site that
+  does not let mail stay on the server; a negative day count omits the tag.
+  When the Backend reports that retention varies per account, AUTHORIZATION
+  announces its value (the smallest any account could have) followed by
+  `USER`, and TRANSACTION announces the account's own value from an
+  `ExpireMailbox`, or the Backend's, without `USER`. Enforcement stays with
+  the host, including the implicit DELE that `EXPIRE 0` permits. Additive: a
+  Backend without `ExpireBackend` announces no EXPIRE. Maps POP3-CAPA-09,
+  POP3-EXPIRE-01 and POP3-EXPIRE-02; the README badge reads "RFC checklist:
+  161/205 mapped".
 
 ### Fixed
 

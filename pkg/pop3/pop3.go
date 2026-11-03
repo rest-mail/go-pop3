@@ -109,6 +109,52 @@ type LoginDelayMailbox interface {
 	LoginDelay() int
 }
 
+// Retention is a message retention policy as the RFC 2449 §6.7 EXPIRE
+// capability announces it: the minimum number of days a message stays on the
+// server under every circumstance of the policy. The zero value is EXPIRE 0.
+//
+// Announcing a policy does not enforce it. The host deletes messages on its
+// own schedule; the engine only reports the policy to clients.
+type Retention struct {
+	// Never reports that the server does not delete messages, announced as
+	// EXPIRE NEVER. Days is ignored when it is set.
+	Never bool
+	// Days is the minimum retention period in days, announced as EXPIRE <Days>.
+	// 0 means the client may not leave mail on the server: RFC 2449 §6.7 lets
+	// the server treat every message retrieved with RETR as deleted when the
+	// session enters UPDATE. That implicit DELE is the host's to apply, for
+	// example from [Mailbox.MarkSeen]; the engine deletes only what the client
+	// DELEted. A negative value without Never omits the tag.
+	Days int
+}
+
+// ExpireBackend is an optional [Backend] extension that announces the
+// RFC 2449 §6.7 EXPIRE capability, telling clients how long the server keeps
+// messages. A Backend without it never has the tag in CAPA. A site with any
+// automatic deletion policy SHOULD announce it, and one that keeps messages
+// indefinitely SHOULD announce Retention{Never: true}.
+type ExpireBackend interface {
+	Backend
+	// Expire returns the retention CAPA announces in AUTHORIZATION state.
+	// perUser reports that the policy varies by account; the value returned
+	// must then be the smallest that could apply to any account (RFC 2449 §6.7
+	// MUST), and CAPA appends USER so the client knows to re-issue CAPA after
+	// login. USER is never appended to EXPIRE NEVER, since a NEVER minimum
+	// leaves no account with a shorter period. After login CAPA announces the
+	// account's own value from an [ExpireMailbox], or this value without USER.
+	Expire() (r Retention, perUser bool)
+}
+
+// ExpireMailbox is an optional [Mailbox] extension for an [ExpireBackend]. In
+// TRANSACTION state CAPA announces the retention it returns, the authenticated
+// account's own policy, never followed by USER. A Mailbox without it announces
+// the Backend's value, and a Mailbox of a Backend without ExpireBackend never
+// has the tag.
+type ExpireMailbox interface {
+	Mailbox
+	Expire() Retention
+}
+
 // ImplementationBackend is an optional [Backend] extension that announces the
 // RFC 2449 §6.9 IMPLEMENTATION capability, identifying the server software. A
 // Backend without it never has the tag in CAPA. Clients must not change their

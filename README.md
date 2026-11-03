@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![RFC checklist: 158/205 mapped](https://img.shields.io/badge/RFC%20checklist-158%2F205%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 161/205 mapped](https://img.shields.io/badge/RFC%20checklist-161%2F205%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3/pkg/pop3/server)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -37,7 +37,7 @@ The module declares go 1.25.
 
 | Import path | What it holds |
 |-------------|---------------|
-| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `ConnectionAuthBackend`, `LoginDelayBackend`, `LoginDelayMailbox`, `MailboxCloser` and `ImplementationBackend` interfaces, and the `Err*` sentinels. |
+| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `ConnectionAuthBackend`, `LoginDelayBackend`, `LoginDelayMailbox`, `ExpireBackend`, `ExpireMailbox`, `MailboxCloser` and `ImplementationBackend` interfaces, the `Retention` value, and the `Err*` sentinels. |
 | `github.com/rest-mail/go-pop3/pkg/pop3/server` | The server: `Server`, `New`, `Ports`, `Session` and `NewSession`. |
 | `pkg/pop3/internal/wire` | Command parsing, log redaction, UID validation, CRLF canonicalization and RETR/TOP framing. Internal: not importable by consumers. |
 | `pkg/pop3/rfctest` | The black-box RFC wire suite, driving only the public API. Tests only. |
@@ -114,13 +114,17 @@ implement. A plain `Backend` keeps USER/PASS and the base capabilities.
 | `pop3.ConnectionAuthBackend` | `AuthenticateConnection(req pop3.AuthRequest) (pop3.Mailbox, error)` | Per-account TLS policy. Replaces `Authenticate`, `AuthenticateUTF8` and `AuthenticatePlain` for every login; `req.Security` says whether TLS is active, whether it was implicit or STLS, and the negotiated `tls.ConnectionState`. Refuse a plaintext login with an ordinary error: `[AUTH]`, counted by the `Limiter`. |
 | `pop3.LoginDelayBackend` | `LoginDelay() (seconds int, perUser bool)` | CAPA `LOGIN-DELAY`; `USER` is appended before login when delay varies by account. A negative delay omits the tag. |
 | `pop3.LoginDelayMailbox` | `LoginDelay() int` | The authenticated account's delay after login, without `USER`. Requires a `LoginDelayBackend`; otherwise the tag is absent. |
+| `pop3.ExpireBackend` | `Expire() (r pop3.Retention, perUser bool)` | CAPA `EXPIRE NEVER` or `EXPIRE <days>` (RFC 2449 §6.7). With `perUser`, return the smallest value any account could have; `USER` is appended before login. A negative day count omits the tag. |
+| `pop3.ExpireMailbox` | `Expire() pop3.Retention` | The authenticated account's retention after login, without `USER`. Requires an `ExpireBackend`; otherwise the tag is absent. |
 | `pop3.MailboxCloser` | `Close() error` | Called exactly once on every Mailbox the backend returned: when the session ends (QUIT after UPDATE, disconnect, idle timeout, server shutdown, recovered panic), or at once when the login is abandoned because `Messages` failed. Release per-session resources here. |
 | `pop3.ImplementationBackend` | `Implementation() (text string, transactionOnly bool)` | Informational CAPA `IMPLEMENTATION`, optionally hidden until login. Empty, non-ASCII, malformed or overlong text omits the tag. |
 
-Each optional backend interface embeds `Backend`; `LoginDelayMailbox` and
-`MailboxCloser` embed `Mailbox`. Without a mailbox-specific delay, CAPA uses the backend's value.
+Each optional backend interface embeds `Backend`; `LoginDelayMailbox`,
+`ExpireMailbox` and `MailboxCloser` embed `Mailbox`. Without a mailbox-specific delay, CAPA uses the backend's value.
 Announcing LOGIN-DELAY does not enforce it: the backend tracks login times and
-returns `pop3.ErrLoginDelay` when needed.
+returns `pop3.ErrLoginDelay` when needed. Announcing EXPIRE does not delete
+anything either: the host applies its retention policy, including the implicit
+DELE that `EXPIRE 0` permits for messages retrieved with RETR.
 
 ### One connection
 
@@ -293,7 +297,6 @@ client tests sit separately from this scoped wire suite.
 | Gap | Issue |
 |-----|-------|
 | Reliably release maildrop locks and resources on every session exit and failed opening. | [#84](https://github.com/rest-mail/go-pop3/issues/84) |
-| Announce host retention policy with EXPIRE. | [#85](https://github.com/rest-mail/go-pop3/issues/85) |
 
 These decisions do not turn unmet checklist rows into conformance claims.
 
