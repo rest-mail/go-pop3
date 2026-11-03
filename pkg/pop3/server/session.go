@@ -52,6 +52,7 @@ type Session struct {
 	utf8     bool // client issued UTF8 (RFC 6856); reset by STLS
 	auth     *authState
 	mailbox  pop3.Mailbox
+	pending  pop3.Mailbox // returned by the Backend, not yet adopted or closed
 	messages []pop3.Message
 	deleted  map[int]bool // sequence numbers marked for deletion
 }
@@ -80,9 +81,12 @@ func NewSession(conn net.Conn, backend pop3.Backend, tlsConfig *tls.Config, limi
 }
 
 // Handle runs the POP3 state machine until the client disconnects or QUITs.
-// However the session ends, Handle closes the connection and then, if the
-// session reached TRANSACTION state with a [pop3.MailboxCloser], closes that
-// Mailbox once.
+// However the session ends, Handle first closes, once, the
+// [pop3.MailboxCloser] the session reached TRANSACTION state with, or one a
+// login was still opening when a panic struck (in Messages, say), and only
+// then the connection: RFC 1939 §6 releases the maildrop lock before the TCP
+// connection closes, so a client that sees the connection end can sign in
+// again at once.
 //
 // A panic in any command handler or Backend/Mailbox call is recovered here so a
 // single misbehaving session is isolated — logged and answered with -ERR before
@@ -99,8 +103,9 @@ func (s *Session) Handle() {
 			// Best-effort notice to the client; the deferred Close follows.
 			s.err("Internal server error")
 		}
-		_ = s.conn.Close()
 		s.closeMailbox(s.mailbox)
+		s.closeMailbox(s.pending)
+		_ = s.conn.Close()
 	}()
 
 	slog.Info("pop3: new connection", "remote", s.conn.RemoteAddr())
@@ -640,7 +645,25 @@ func (s *Session) handleAuth(arg string) bool {
 // login finishes a USER/PASS or AUTH attempt with the Backend's answer: it
 // replies with the right response code, keeps the [pop3.Limiter] up to date, and on
 // success loads the maildrop and enters TRANSACTION.
+//
+// Every non-nil Mailbox the Backend returns belongs to the session from here,
+// and is closed exactly once: at once when the login does not adopt it, or when
+// the session ends. A Mailbox returned together with an error (a partial
+// result) is never used and is closed before the reply.
 func (s *Session) login(username string, mailbox pop3.Mailbox, err error) {
+	if err != nil {
+		s.closeMailbox(mailbox)
+		mailbox = nil
+	}
+	// Not deferred: after a panic, Handle must still find the Mailbox here.
+	s.pending = mailbox
+	s.enter(username, mailbox, err)
+	s.pending = nil
+}
+
+// enter replies to a login with the Backend's answer and, when it succeeded,
+// loads the maildrop and adopts mailbox as the session's own.
+func (s *Session) enter(username string, mailbox pop3.Mailbox, err error) {
 	ip := extractIP(s.conn.RemoteAddr().String())
 
 	if errors.Is(err, pop3.ErrInUse) {
@@ -706,6 +729,7 @@ func (s *Session) login(username string, mailbox pop3.Mailbox, err error) {
 	// classification or default to SYS/TEMP (RFC 3206 §4).
 	if err != nil {
 		// The session never uses this Mailbox; a later login gets a new one.
+		s.pending = nil
 		s.closeMailbox(mailbox)
 		if errors.Is(err, pop3.ErrInUse) {
 			s.err("[IN-USE] Maildrop already in use")
@@ -718,6 +742,7 @@ func (s *Session) login(username string, mailbox pop3.Mailbox, err error) {
 
 	// The load succeeded: commit the session to TRANSACTION state atomically.
 	s.auth.authenticated = true
+	s.pending = nil
 	s.mailbox = mailbox
 	s.messages = messages
 

@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   client disconnect, idle timeout, server shutdown or a recovered panic, and
   straight away when a login is abandoned because `Messages` failed. A
   Mailbox without it is used as before.
+- Maildrop release on every exit path (#84). Every non-nil Mailbox the Backend
+  returns now belongs to the session, so `pop3.MailboxCloser.Close` also runs
+  exactly once for a Mailbox returned together with an error (a partial
+  authentication result, never used and closed before the `-ERR`) and for one
+  whose `Messages` panicked (closed when the session ends). Close now runs
+  before the connection closes, so a lock is released before the client sees
+  the session end (RFC 1939 §6). The base `Mailbox` interface is unchanged.
+  Maps POP3-LOCK-01, POP3-LOCK-02 and POP3-UPDATE-07; the README badge reads
+  "RFC checklist: 164/205 mapped".
 - `pop3.ConnectionAuthBackend`, an optional `Backend` extension with
   `AuthenticateConnection(pop3.AuthRequest) (pop3.Mailbox, error)` (#87). When
   a Backend implements it, it replaces `Authenticate`, `AuthenticateUTF8` and

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![RFC checklist: 161/205 mapped](https://img.shields.io/badge/RFC%20checklist-161%2F205%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 164/205 mapped](https://img.shields.io/badge/RFC%20checklist-164%2F205%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3/pkg/pop3/server)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -116,7 +116,7 @@ implement. A plain `Backend` keeps USER/PASS and the base capabilities.
 | `pop3.LoginDelayMailbox` | `LoginDelay() int` | The authenticated account's delay after login, without `USER`. Requires a `LoginDelayBackend`; otherwise the tag is absent. |
 | `pop3.ExpireBackend` | `Expire() (r pop3.Retention, perUser bool)` | CAPA `EXPIRE NEVER` or `EXPIRE <days>` (RFC 2449 §6.7). With `perUser`, return the smallest value any account could have; `USER` is appended before login. A negative day count omits the tag. |
 | `pop3.ExpireMailbox` | `Expire() pop3.Retention` | The authenticated account's retention after login, without `USER`. Requires an `ExpireBackend`; otherwise the tag is absent. |
-| `pop3.MailboxCloser` | `Close() error` | Called exactly once on every Mailbox the backend returned: when the session ends (QUIT after UPDATE, disconnect, idle timeout, server shutdown, recovered panic), or at once when the login is abandoned because `Messages` failed. Release per-session resources here. |
+| `pop3.MailboxCloser` | `Close() error` | Called exactly once on every Mailbox the backend returned: when the session ends (QUIT after UPDATE, disconnect, idle timeout, server shutdown, recovered panic, including one in `Messages`), before the connection closes; or at once, before the `-ERR`, when the login does not use it because `Messages` failed or the Mailbox came with an error. Release the maildrop lock and per-session resources here. |
 | `pop3.ImplementationBackend` | `Implementation() (text string, transactionOnly bool)` | Informational CAPA `IMPLEMENTATION`, optionally hidden until login. Empty, non-ASCII, malformed or overlong text omits the tag. |
 
 Each optional backend interface embeds `Backend`; `LoginDelayMailbox`,
@@ -282,7 +282,7 @@ client tests sit separately from this scoped wire suite.
 | APOP and additional SASL mechanisms | USER/PASS and optional PLAIN only. APOP's MD5 shared-secret scheme and challenge-response mechanisms require different credential storage; this engine uses TLS to protect the existing credential seam. No APOP timestamp, GSSAPI, EXTERNAL or ANONYMOUS is offered. |
 | Client-certificate login | Certificates may be verified by `tls.Config`, but do not authenticate a maildrop. Mapping a certificate identity into an account needs a different authentication contract; USER/PASS or PLAIN still establishes the account. |
 | SASLprep and `UTF8 USER` | No built-in Unicode preparation tables, and CAPA never advertises `UTF8 USER`. The backend owns credential preparation and authorization-identity policy, including the RFC 5034 recommendation; blindly normalizing inside the protocol layer could disagree with its credential store. |
-| Message conversion and storage policy | No MIME conversion, UTF-8 header downgrading, retention enforcement, UID history or storage locks. The host owns the stored representation and policy; the engine reports negotiated mode and calls its backend. A cleanup callback is planned below. |
+| Message conversion and storage policy | No MIME conversion, UTF-8 header downgrading, retention enforcement, UID history or storage locks. The host owns the stored representation and policy, including taking the maildrop lock; the engine reports negotiated mode, calls its backend, and calls `pop3.MailboxCloser` once on every exit path as the release boundary. |
 | POP3 client | Server engine only; no production client or capability cache. The RFC and independent-client tests are verification tools. |
 | Obsolete TLS cipher requirements | The library uses the supplied `tls.Config` and Go's `crypto/tls`; it does not add RFC 2595's obsolete DSS/3DES suite. Current policy follows the host's configuration and RFC 8314. |
 
@@ -291,12 +291,6 @@ client tests sit separately from this scoped wire suite.
 | Area | Current behavior |
 |------|------------------|
 | LANG (RFC 6856 §3) | No language negotiation or translated response catalogue; replies use English text and protocol response codes. |
-
-#### Planned
-
-| Gap | Issue |
-|-----|-------|
-| Reliably release maildrop locks and resources on every session exit and failed opening. | [#84](https://github.com/rest-mail/go-pop3/issues/84) |
 
 These decisions do not turn unmet checklist rows into conformance claims.
 
