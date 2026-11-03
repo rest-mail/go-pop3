@@ -181,6 +181,21 @@ type Mailbox interface {
 	Delete(uid string) error
 }
 
+// MailboxCloser is an optional [Mailbox] extension for a Mailbox that holds
+// resources for its session, such as a connection or session with an upstream
+// store. The server calls Close exactly once on every Mailbox the Backend hands
+// it: when the session ends (after QUIT and its UPDATE state, on a client
+// disconnect or idle timeout, when the server shuts down, or after a recovered
+// panic), or straight away when the login is abandoned after Authenticate
+// returned the Mailbox because [Mailbox.Messages] failed. It is never called
+// for a session that did not obtain a Mailbox. The client may already be gone
+// when Close runs; an error is logged and otherwise ignored. A Mailbox without
+// it is used exactly as before.
+type MailboxCloser interface {
+	Mailbox
+	Close() error
+}
+
 // Limiter is the per-IP connection and authentication guard the server.Server
 // consults. It is a structural interface: any type with these methods satisfies
 // it. Pass [NopLimiter] (or nil) to impose no limits.

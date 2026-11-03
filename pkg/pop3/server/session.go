@@ -79,6 +79,9 @@ func NewSession(conn net.Conn, backend pop3.Backend, tlsConfig *tls.Config, limi
 }
 
 // Handle runs the POP3 state machine until the client disconnects or QUITs.
+// However the session ends, Handle closes the connection and then, if the
+// session reached TRANSACTION state with a [pop3.MailboxCloser], closes that
+// Mailbox once.
 //
 // A panic in any command handler or Backend/Mailbox call is recovered here so a
 // single misbehaving session is isolated — logged and answered with -ERR before
@@ -96,6 +99,7 @@ func (s *Session) Handle() {
 			s.err("Internal server error")
 		}
 		_ = s.conn.Close()
+		s.closeMailbox(s.mailbox)
 	}()
 
 	slog.Info("pop3: new connection", "remote", s.conn.RemoteAddr())
@@ -149,9 +153,13 @@ func (s *Session) Handle() {
 				s.handleUTF8()
 			}
 		case "USER":
-			s.handleUser(arg)
+			if s.handleUser(arg) {
+				return
+			}
 		case "PASS":
-			s.handlePass(arg)
+			if s.handlePass(arg) {
+				return
+			}
 		case "AUTH":
 			if s.handleAuth(arg) {
 				return
@@ -371,39 +379,50 @@ func (s *Session) handleSTLS() bool {
 	return false
 }
 
-func (s *Session) handleUser(arg string) {
+// handleUser answers USER. It reports whether the session must end because
+// the address is banned.
+func (s *Session) handleUser(arg string) bool {
 	if s.auth.authenticated {
 		s.err("Already authenticated")
-		return
+		return false
+	}
+	if s.refuseBanned() {
+		return true
 	}
 	if !s.usingTLS && s.tlsConfig != nil {
 		s.err("TLS required")
-		return
+		return false
 	}
 	if arg == "" {
 		s.err("Username required")
-		return
+		return false
 	}
 	s.auth.username = arg
 	s.ok("")
+	return false
 }
 
-func (s *Session) handlePass(arg string) {
+// handlePass answers PASS. It reports whether the session must end because
+// the address is banned.
+func (s *Session) handlePass(arg string) bool {
 	// Consume once, including empty PASS and every backend failure path. Keep
 	// the username locally for authentication and logs after clearing state.
 	username := s.auth.username
 	s.auth.username = ""
 	if s.auth.authenticated {
 		s.err("Already authenticated")
-		return
+		return false
+	}
+	if s.refuseBanned() {
+		return true
 	}
 	if username == "" {
 		s.err("USER first")
-		return
+		return false
 	}
 	if arg == "" {
 		s.err("Password required")
-		return
+		return false
 	}
 
 	var mailbox pop3.Mailbox
@@ -414,6 +433,42 @@ func (s *Session) handlePass(arg string) {
 		mailbox, err = s.backend.Authenticate(username, arg)
 	}
 	s.login(username, mailbox, err)
+	return false
+}
+
+// refuseBanned ends an authentication attempt from a banned address before
+// any credential reaches the Backend (issue #90). The server already refuses
+// a banned address at accept time, but a session opened before the ban would
+// otherwise still sign in. The reply is RFC 3206 §4 SYS/TEMP, not §5 AUTH: the
+// ban lifts by itself and the credentials may well be right, so the client
+// should retry later rather than ask its user for a new password, which is
+// what AUTH tells it to do. It reports whether it refused, in which case the
+// caller ends the session.
+func (s *Session) refuseBanned() bool {
+	ip := extractIP(s.conn.RemoteAddr().String())
+	if !s.limiter.IsBanned(ip) {
+		return false
+	}
+	slog.Warn("pop3: authentication refused, banned", "remote", s.conn.RemoteAddr(), "ip", ip)
+	s.err("[SYS/TEMP] Too many authentication failures, try again later")
+	return true
+}
+
+// closeMailbox tells a [pop3.MailboxCloser] that the session is done with it.
+// A panic in Close is recovered and logged like one in a command handler.
+func (s *Session) closeMailbox(mailbox pop3.Mailbox) {
+	c, ok := mailbox.(pop3.MailboxCloser)
+	if !ok {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("pop3: mailbox close panic recovered", "remote", s.conn.RemoteAddr(), "panic", r)
+		}
+	}()
+	if err := c.Close(); err != nil {
+		slog.Warn("pop3: mailbox close failed", "remote", s.conn.RemoteAddr(), "error", err)
+	}
 }
 
 // saslOffered reports whether AUTH PLAIN is accepted now, which is when CAPA
@@ -427,7 +482,8 @@ func (s *Session) saslOffered() bool {
 // handleAuth runs the RFC 5034 AUTH command with the only mechanism offered,
 // SASL PLAIN (RFC 4616). The client response comes either as the initial
 // response argument or on the line after an empty "+ " challenge. It reports
-// whether the session must end because the response line could not be read.
+// whether the session must end because the address is banned or the response
+// line could not be read.
 func (s *Session) handleAuth(arg string) bool {
 	b, ok := s.backend.(pop3.SASLBackend)
 	if !ok {
@@ -437,6 +493,11 @@ func (s *Session) handleAuth(arg string) bool {
 	if s.auth.authenticated {
 		s.err("Already authenticated")
 		return false
+	}
+	// Refuse a banned address before the "+ " challenge, so the credential
+	// is never even solicited.
+	if s.refuseBanned() {
+		return true
 	}
 	if !s.usingTLS && s.tlsConfig != nil {
 		s.err("TLS required")
@@ -564,6 +625,8 @@ func (s *Session) login(username string, mailbox pop3.Mailbox, err error) {
 	// session is IN-USE (RFC 2449 §8.1.2); other errors use the backend
 	// classification or default to SYS/TEMP (RFC 3206 §4).
 	if err != nil {
+		// The session never uses this Mailbox; a later login gets a new one.
+		s.closeMailbox(mailbox)
 		if errors.Is(err, pop3.ErrInUse) {
 			s.err("[IN-USE] Maildrop already in use")
 			return

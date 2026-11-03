@@ -52,10 +52,13 @@ func (l *inUseLimiter) IsBanned(string) bool {
 }
 func (l *inUseLimiter) ResetAuth(string) { l.resets.Add(1) }
 
-func (l *inUseLimiter) check(t *testing.T, resets int32) {
+// check asserts the limiter calls. authCommands is the number of USER and PASS
+// commands sent in AUTHORIZATION: each checks the ban once before it reaches
+// the Backend (issue #90), and the Backend's answer adds no further check.
+func (l *inUseLimiter) check(t *testing.T, resets, authCommands int32) {
 	t.Helper()
-	if got := [3]int32{l.fails.Load(), l.bans.Load(), l.resets.Load()}; got != [3]int32{0, 0, resets} {
-		t.Fatalf("limiter failures/ban checks/resets = %v, want [0 0 %d]", got, resets)
+	if got := [3]int32{l.fails.Load(), l.bans.Load(), l.resets.Load()}; got != [3]int32{0, authCommands, resets} {
+		t.Fatalf("limiter failures/ban checks/resets = %v, want [0 %d %d]", got, authCommands, resets)
 	}
 }
 
@@ -140,7 +143,7 @@ func testResponseCodeInUse(t *testing.T, utf8 bool) {
 							w.status(w.cmd(command), "-ERR")
 						}
 						b.calls(t, attempt, messages, 0)
-						l.check(t, attempt)
+						l.check(t, attempt, 3*attempt)
 					}
 					if retry {
 						w.login("secret")
@@ -153,11 +156,11 @@ func testResponseCodeInUse(t *testing.T, utf8 bool) {
 						if uid := b.deletedUID.Load(); uid != "error-first" {
 							t.Fatalf("deleted UID = %v, want error-first", uid)
 						}
-						l.check(t, 3)
+						l.check(t, 3, 8)
 					} else {
 						quit(t, w, "+OK")
 						b.calls(t, 2, messages, 0)
-						l.check(t, 2)
+						l.check(t, 2, 6)
 					}
 				})
 			}
