@@ -814,6 +814,7 @@ RFC itself. No code bug was found.
 | POP3-RESP-CODES-09 | RFC 3206 §§5, 8 | RECOMMENDED | Never send the AUTH code to USER, which would reveal that the user exists: USER replies `+OK` to known and unknown names, and its refusals (no argument, TLS required, already authenticated) carry no code. | TestRFC3206NoAuthCodeOnUser |
 | POP3-RESP-CODES-10 | RFC 3206 §§5, 6 | Normative | AUTH-RESP-CODE promises that only AUTH-coded errors are credential problems: AUTH is on every credential-caused PASS and AUTH failure, and never on system, USER or TLS-required refusals. | TestResponseCodeAuthRespCodeCapability, TestSASLPlainCredentialFailures, TestResponseCodeBackendSystemFailures, TestRFC3206NoAuthCodeOnUser |
 | POP3-RESP-CODES-11 | RFC 3206 §§3–5 | Normative | Client duties: compare response codes case-insensitively, and ask for new credentials only on AUTH when AUTH-RESP-CODE is announced. | n/a: client duties. This library is a server only. |
+| POP3-RESP-CODES-12 | RFC 3206 §§4–5 | Normative | A limiter ban reached by a session opened before the ban refuses USER, PASS and AUTH (before the `+ ` challenge) with `-ERR [SYS/TEMP] Too many authentication failures, try again later` and closes the connection; no credential reaches the Backend, even a correct one. SYS/TEMP, not AUTH: the ban lifts by itself and the credentials may be right, so the client retries later rather than asking for a new password. An address that is not banned signs in. | TestBannedSessionRefusedBeforeCredential |
 
 ## RFC 4616: line-by-line audit additions
 

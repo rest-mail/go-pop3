@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml/badge.svg)](https://github.com/rest-mail/go-pop3/actions/workflows/ci.yml)
 [![Coverage gate: >=95%](https://img.shields.io/badge/coverage%20gate-%3E%3D95%25-brightgreen)](COVERAGE.md)
-[![RFC checklist: 155/204 mapped](https://img.shields.io/badge/RFC%20checklist-155%2F204%20mapped-blue)](CHECKLIST.md)
+[![RFC checklist: 156/205 mapped](https://img.shields.io/badge/RFC%20checklist-156%2F205%20mapped-blue)](CHECKLIST.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rest-mail/go-pop3.svg)](https://pkg.go.dev/github.com/rest-mail/go-pop3/pkg/pop3/server)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rest-mail/go-pop3)](https://goreportcard.com/report/github.com/rest-mail/go-pop3)
 
@@ -37,7 +37,7 @@ The module declares go 1.25.
 
 | Import path | What it holds |
 |-------------|---------------|
-| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `LoginDelayBackend`, `LoginDelayMailbox` and `ImplementationBackend` interfaces, and the `Err*` sentinels. |
+| `github.com/rest-mail/go-pop3/pkg/pop3` | Backend-facing contracts: `Backend`, `Mailbox`, `Message`, `Limiter`, `NopLimiter`, `OctetCount`, the optional `SASLBackend`, `UTF8Backend`, `LoginDelayBackend`, `LoginDelayMailbox`, `MailboxCloser` and `ImplementationBackend` interfaces, and the `Err*` sentinels. |
 | `github.com/rest-mail/go-pop3/pkg/pop3/server` | The server: `Server`, `New`, `Ports`, `Session` and `NewSession`. |
 | `pkg/pop3/internal/wire` | Command parsing, log redaction, UID validation, CRLF canonicalization and RETR/TOP framing. Internal: not importable by consumers. |
 | `pkg/pop3/rfctest` | The black-box RFC wire suite, driving only the public API. Tests only. |
@@ -113,10 +113,11 @@ implement. A plain `Backend` keeps USER/PASS and the base capabilities.
 | `pop3.UTF8Backend` | `AuthenticateUTF8(user, pass string, utf8 bool) (pop3.Mailbox, error)` | CAPA `UTF8` and the UTF8 command before login. Replaces `Authenticate` for USER/PASS; the mode tells the backend which message form to serve. |
 | `pop3.LoginDelayBackend` | `LoginDelay() (seconds int, perUser bool)` | CAPA `LOGIN-DELAY`; `USER` is appended before login when delay varies by account. A negative delay omits the tag. |
 | `pop3.LoginDelayMailbox` | `LoginDelay() int` | The authenticated account's delay after login, without `USER`. Requires a `LoginDelayBackend`; otherwise the tag is absent. |
+| `pop3.MailboxCloser` | `Close() error` | Called exactly once on every Mailbox the backend returned: when the session ends (QUIT after UPDATE, disconnect, idle timeout, server shutdown, recovered panic), or at once when the login is abandoned because `Messages` failed. Release per-session resources here. |
 | `pop3.ImplementationBackend` | `Implementation() (text string, transactionOnly bool)` | Informational CAPA `IMPLEMENTATION`, optionally hidden until login. Empty, non-ASCII, malformed or overlong text omits the tag. |
 
-Each optional backend interface embeds `Backend`; `LoginDelayMailbox` embeds
-`Mailbox`. Without a mailbox-specific delay, CAPA uses the backend's value.
+Each optional backend interface embeds `Backend`; `LoginDelayMailbox` and
+`MailboxCloser` embed `Mailbox`. Without a mailbox-specific delay, CAPA uses the backend's value.
 Announcing LOGIN-DELAY does not enforce it: the backend tracks login times and
 returns `pop3.ErrLoginDelay` when needed.
 
@@ -169,7 +170,10 @@ TLS version and cipher appear in STLS and authentication logs.
 The host verifies credentials, supplies the TLS certificate and policy, and
 implements `Limiter` if limits are wanted. `Accept`/`Release` cap connections;
 `RecordAuthFail`/`IsBanned`/`ResetAuth` control bans. The server checks bans at
-accept time and after credential failures. A bare `Session` serves an already
+accept time, before every USER, PASS and AUTH (so a session opened before the
+ban cannot sign in; it gets `-ERR [SYS/TEMP] Too many authentication failures,
+try again later` and is closed before any credential reaches the backend), and
+after credential failures. A bare `Session` serves an already
 accepted connection; the host owns connection admission around it.
 
 For SASL PLAIN the host receives `authzid`, `authcid`, password and UTF8 mode.

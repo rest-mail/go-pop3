@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `pop3.MailboxCloser`, an optional `Mailbox` extension with `Close() error`
+  (#89). The server calls it exactly once on every Mailbox the Backend
+  returned: when the session ends, whether by QUIT (after the UPDATE state),
+  client disconnect, idle timeout, server shutdown or a recovered panic, and
+  straight away when a login is abandoned because `Messages` failed. A
+  Mailbox without it is used as before.
+
+### Fixed
+
+- A session opened before its address was banned could still sign in (#90):
+  the ban was read only after a failed attempt. USER, PASS and AUTH (before
+  the `+ ` challenge) now check the Limiter first and refuse a banned address
+  with `-ERR [SYS/TEMP] Too many authentication failures, try again later`,
+  then close the connection; no credential reaches the Backend. SYS/TEMP
+  (RFC 3206 §4) rather than AUTH (§5), because the ban lifts by itself and the
+  credentials may be right: the client should retry later, not ask for a new
+  password. The failure that earns the ban still replies `[AUTH]`. Checked by
+  POP3-RESP-CODES-12; the README badge reads "RFC checklist: 156/205 mapped".
+
 ## [0.4.0] - 2026-10-26
 
 ### Changed (breaking)

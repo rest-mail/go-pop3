@@ -70,7 +70,7 @@ func TestResponseCodeLoginDelay(t *testing.T) {
 						w.status(w.cmd(command), "-ERR")
 					}
 					b.calls(t, attempt, 0, 0)
-					l.check(t, attempt)
+					l.check(t, attempt, 3*attempt)
 				}
 				if retry {
 					w.login("secret")
@@ -81,11 +81,11 @@ func TestResponseCodeLoginDelay(t *testing.T) {
 					if uid := b.deletedUID.Load(); uid != "error-first" {
 						t.Fatalf("deleted UID = %v, want error-first", uid)
 					}
-					l.check(t, 3)
+					l.check(t, 3, 8)
 				} else {
 					quit(t, w, "+OK")
 					b.calls(t, 2, 0, 0)
-					l.check(t, 2)
+					l.check(t, 2, 6)
 				}
 			})
 		}

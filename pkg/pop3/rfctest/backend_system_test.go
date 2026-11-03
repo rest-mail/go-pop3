@@ -103,7 +103,7 @@ func TestResponseCodeBackendSystemFailures(t *testing.T) {
 							if duringAuth {
 								resets = 0
 							}
-							l.check(t, resets)
+							l.check(t, resets, 3*attempt)
 						}
 						if retry {
 							w.login("secret")
@@ -120,7 +120,7 @@ func TestResponseCodeBackendSystemFailures(t *testing.T) {
 							if duringAuth {
 								resets = 1
 							}
-							l.check(t, resets)
+							l.check(t, resets, 8)
 						} else {
 							quit(t, w, "+OK")
 							b.calls(t, 2, messages, 0)
@@ -128,7 +128,7 @@ func TestResponseCodeBackendSystemFailures(t *testing.T) {
 							if duringAuth {
 								resets = 0
 							}
-							l.check(t, resets)
+							l.check(t, resets, 6)
 						}
 					})
 				}
